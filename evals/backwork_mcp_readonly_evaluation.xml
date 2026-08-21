@@ -1,10 +1,10 @@
 <evaluation>
   <qa_pair>
-    <question>Use read-only Verity tools to find the MAC jurisdiction covering Texas, then use that jurisdiction when checking CPT 76942. What jurisdiction code covers Texas? Answer with the exact jurisdiction code only.</question>
+    <question>Use read-only Backwork tools to find the MAC jurisdiction covering Texas, then use that jurisdiction when checking CPT 76942. What jurisdiction code covers Texas? Answer with the exact jurisdiction code only.</question>
     <answer>JH</answer>
   </qa_pair>
   <qa_pair>
-    <question>Use read-only Verity tools to find the MAC jurisdiction covering California. What jurisdiction code covers California? Answer with the exact jurisdiction code only.</question>
+    <question>Use read-only Backwork tools to find the MAC jurisdiction covering California. What jurisdiction code covers California? Answer with the exact jurisdiction code only.</question>
     <answer>JE</answer>
   </qa_pair>
   <qa_pair>
@@ -16,7 +16,7 @@
     <answer>HCPCS</answer>
   </qa_pair>
   <qa_pair>
-    <question>Look up CPT 76942 with RVU data. What work RVU does Verity return? Answer with the numeric value only.</question>
+    <question>Look up CPT 76942 with RVU data. What work RVU does Backwork return? Answer with the numeric value only.</question>
     <answer>0.65</answer>
   </qa_pair>
   <qa_pair>

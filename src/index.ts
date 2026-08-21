@@ -12,49 +12,49 @@ import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/
 import { z } from "zod";
 
 // Configuration
-const VERITY_API_BASE = process.env.VERITY_API_BASE || "https://verity.backworkai.com/api/v1";
+const BACKWORK_API_BASE = process.env.BACKWORK_API_BASE || "https://backworkhealth.com/api/v1";
 const requestApiKey = new AsyncLocalStorage<string | undefined>();
 const requestToolName = new AsyncLocalStorage<string | undefined>();
 const args = process.argv.slice(2);
 const shouldShowHelp = args.includes("--help") || args.includes("-h");
-const transportMode = (readOption("transport") || process.env.VERITY_MCP_TRANSPORT || (args.includes("--http") ? "http" : "stdio")).toLowerCase();
-const httpPath = normalizePath(readOption("path") || process.env.VERITY_MCP_PATH || "/mcp");
-const httpHost = readOption("host") || process.env.VERITY_MCP_HOST || "127.0.0.1";
-const httpPort = Number(readOption("port") || process.env.VERITY_MCP_PORT || process.env.PORT || "3000");
-const allowEnvKeyForHttp = args.includes("--allow-env-key") || process.env.VERITY_MCP_ALLOW_ENV_KEY === "true";
-const allowedOrigins = parseAllowedList(process.env.VERITY_MCP_ALLOWED_ORIGINS || process.env.VERITY_MCP_ALLOW_ORIGIN);
-const allowedHosts = parseAllowedList(process.env.VERITY_MCP_ALLOWED_HOSTS || process.env.VERITY_MCP_ALLOW_HOST);
+const transportMode = (readOption("transport") || process.env.BACKWORK_MCP_TRANSPORT || (args.includes("--http") ? "http" : "stdio")).toLowerCase();
+const httpPath = normalizePath(readOption("path") || process.env.BACKWORK_MCP_PATH || "/mcp");
+const httpHost = readOption("host") || process.env.BACKWORK_MCP_HOST || "127.0.0.1";
+const httpPort = Number(readOption("port") || process.env.BACKWORK_MCP_PORT || process.env.PORT || "3000");
+const allowEnvKeyForHttp = args.includes("--allow-env-key") || process.env.BACKWORK_MCP_ALLOW_ENV_KEY === "true";
+const allowedOrigins = parseAllowedList(process.env.BACKWORK_MCP_ALLOWED_ORIGINS || process.env.BACKWORK_MCP_ALLOW_ORIGIN);
+const allowedHosts = parseAllowedList(process.env.BACKWORK_MCP_ALLOWED_HOSTS || process.env.BACKWORK_MCP_ALLOW_HOST);
 const oauthAuthorizationServers = parseDelimitedList(
-  process.env.VERITY_MCP_OAUTH_AUTHORIZATION_SERVERS || process.env.VERITY_MCP_OAUTH_AUTHORIZATION_SERVER,
+  process.env.BACKWORK_MCP_OAUTH_AUTHORIZATION_SERVERS || process.env.BACKWORK_MCP_OAUTH_AUTHORIZATION_SERVER,
 );
-const httpAuthMode = normalizeAuthMode(readOption("auth") || process.env.VERITY_MCP_AUTH_MODE, oauthAuthorizationServers.length > 0);
-const oauthScopes = parseDelimitedList(process.env.VERITY_MCP_OAUTH_SCOPES || "verity:mcp");
-const oauthRequiredScopes = parseDelimitedList(process.env.VERITY_MCP_OAUTH_REQUIRED_SCOPES);
-const oauthIntrospectionUrl = process.env.VERITY_MCP_OAUTH_INTROSPECTION_URL;
-const oauthIntrospectionClientId = process.env.VERITY_MCP_OAUTH_INTROSPECTION_CLIENT_ID;
-const oauthIntrospectionClientSecret = process.env.VERITY_MCP_OAUTH_INTROSPECTION_CLIENT_SECRET;
-const oauthIntrospectionBearerToken = process.env.VERITY_MCP_OAUTH_INTROSPECTION_TOKEN;
-const oauthApiKeyClaim = process.env.VERITY_MCP_OAUTH_API_KEY_CLAIM;
-const oauthExpectedAudiences = parseDelimitedList(process.env.VERITY_MCP_OAUTH_EXPECTED_AUDIENCE);
-const oauthResourceOverride = process.env.VERITY_MCP_OAUTH_RESOURCE;
-const publicUrlOverride = process.env.VERITY_MCP_PUBLIC_URL;
+const httpAuthMode = normalizeAuthMode(readOption("auth") || process.env.BACKWORK_MCP_AUTH_MODE, oauthAuthorizationServers.length > 0);
+const oauthScopes = parseDelimitedList(process.env.BACKWORK_MCP_OAUTH_SCOPES || "backwork:mcp");
+const oauthRequiredScopes = parseDelimitedList(process.env.BACKWORK_MCP_OAUTH_REQUIRED_SCOPES);
+const oauthIntrospectionUrl = process.env.BACKWORK_MCP_OAUTH_INTROSPECTION_URL;
+const oauthIntrospectionClientId = process.env.BACKWORK_MCP_OAUTH_INTROSPECTION_CLIENT_ID;
+const oauthIntrospectionClientSecret = process.env.BACKWORK_MCP_OAUTH_INTROSPECTION_CLIENT_SECRET;
+const oauthIntrospectionBearerToken = process.env.BACKWORK_MCP_OAUTH_INTROSPECTION_TOKEN;
+const oauthApiKeyClaim = process.env.BACKWORK_MCP_OAUTH_API_KEY_CLAIM;
+const oauthExpectedAudiences = parseDelimitedList(process.env.BACKWORK_MCP_OAUTH_EXPECTED_AUDIENCE);
+const oauthResourceOverride = process.env.BACKWORK_MCP_OAUTH_RESOURCE;
+const publicUrlOverride = process.env.BACKWORK_MCP_PUBLIC_URL;
 
 type AuthenticatedIncomingMessage = IncomingMessage & { auth?: AuthInfo };
-type VerityToolInputSchema = z.ZodRawShape;
-type VerityToolConfig = {
+type BackworkToolInputSchema = z.ZodRawShape;
+type BackworkToolConfig = {
   title?: string;
   description?: string;
-  inputSchema?: VerityToolInputSchema;
-  outputSchema?: VerityToolInputSchema;
+  inputSchema?: BackworkToolInputSchema;
+  outputSchema?: BackworkToolInputSchema;
   annotations?: ToolAnnotations;
   _meta?: Record<string, unknown>;
 };
-type VerityToolHandler = (args: any, extra: unknown) => CallToolResult | Promise<CallToolResult>;
-type RegisterVerityTool = (name: string, config: VerityToolConfig, handler: VerityToolHandler) => void;
+type BackworkToolHandler = (args: any, extra: unknown) => CallToolResult | Promise<CallToolResult>;
+type RegisterBackworkTool = (name: string, config: BackworkToolConfig, handler: BackworkToolHandler) => void;
 type ResponseFormat = "markdown" | "json";
 type HttpAuthMode = "api-key" | "oauth" | "dual";
 type HttpAuthContext = {
-  verityCredential: string;
+  backworkCredential: string;
   authInfo: AuthInfo;
 };
 
@@ -63,8 +63,8 @@ const responseFormatSchema = z
   .default("markdown")
   .describe("Output format: 'markdown' for readable text or 'json' for machine-readable structuredContent.");
 
-const verityToolOutputSchema = {
-  data: z.unknown().optional().describe("Structured data returned by the Verity API when available."),
+const backworkToolOutputSchema = {
+  data: z.unknown().optional().describe("Structured data returned by the Backwork API when available."),
   meta: z.unknown().optional().describe("Response metadata such as pagination when available."),
   message: z.string().describe("Human-readable result, status, or empty-result message."),
 };
@@ -90,7 +90,7 @@ const toolTitles: Record<string, string> = {
 
 const includeSchema = z.union([z.string(), z.array(z.string())]).optional();
 
-class VerityApiError extends Error {
+class BackworkApiError extends Error {
   status: number;
   code?: string;
   hint?: string;
@@ -110,7 +110,7 @@ class VerityApiError extends Error {
     requiredPlan?: string;
   }) {
     super(params.message);
-    this.name = "VerityApiError";
+    this.name = "BackworkApiError";
     this.status = params.status;
     this.code = params.code;
     this.hint = params.hint;
@@ -163,11 +163,11 @@ function normalizeAuthMode(value: string | undefined, oauthConfigured: boolean):
 }
 
 function printHelp(): void {
-  console.error(`Verity MCP Server
+  console.error(`Backwork MCP Server
 
 Usage:
-  verity-mcp                         Start stdio transport
-  verity-mcp --http                  Start Streamable HTTP transport on /mcp
+  backwork-mcp                         Start stdio transport
+  backwork-mcp --http                  Start Streamable HTTP transport on /mcp
 
 Options:
   --transport stdio|http             Transport mode (default: stdio)
@@ -176,19 +176,19 @@ Options:
   --port 3000                        HTTP port (default: 3000 or PORT)
   --path /mcp                        HTTP MCP endpoint path (default: /mcp)
   --auth api-key|oauth|dual          HTTP bearer auth mode (default: api-key, or dual when OAuth is configured)
-  --allow-env-key                    Allow HTTP requests to use VERITY_API_KEY when no bearer token is sent
+  --allow-env-key                    Allow HTTP requests to use BACKWORK_API_KEY when no bearer token is sent
 
 Authentication:
-  stdio requires VERITY_API_KEY in the server environment.
+  stdio requires BACKWORK_API_KEY in the server environment.
   http expects Authorization: Bearer on each MCP request.
-  OAuth discovery is enabled when VERITY_MCP_OAUTH_AUTHORIZATION_SERVERS is set.
+  OAuth discovery is enabled when BACKWORK_MCP_OAUTH_AUTHORIZATION_SERVERS is set.
 `);
 }
 
-function resolveVerityApiKey(): string {
-  const apiKey = requestApiKey.getStore() || process.env.VERITY_API_KEY;
+function resolveBackworkApiKey(): string {
+  const apiKey = requestApiKey.getStore() || process.env.BACKWORK_API_KEY;
   if (!apiKey) {
-    throw new Error("Verity API key missing. Set VERITY_API_KEY for stdio, or send Authorization: Bearer <key> for HTTP.");
+    throw new Error("Backwork API key missing. Set BACKWORK_API_KEY for stdio, or send Authorization: Bearer <key> for HTTP.");
   }
   return apiKey;
 }
@@ -235,7 +235,7 @@ function isAllowedHost(req: IncomingMessage): boolean {
   const vercelUrlHost = normalizeHost(process.env.VERCEL_URL);
   if (vercelUrlHost && requestHost === vercelUrlHost) return true;
 
-  const publicHost = normalizeHost(process.env.VERITY_MCP_PUBLIC_HOST);
+  const publicHost = normalizeHost(process.env.BACKWORK_MCP_PUBLIC_HOST);
   if (publicHost && requestHost === publicHost) return true;
 
   const configuredHost = normalizeHost(httpHost);
@@ -301,7 +301,7 @@ function quoteAuthValue(value: string): string {
 }
 
 function bearerChallenge(req: IncomingMessage, error?: HttpAuthError): string {
-  const parts = [`realm=${quoteAuthValue("Verity MCP")}`];
+  const parts = [`realm=${quoteAuthValue("Backwork MCP")}`];
   if (error?.code) parts.push(`error=${quoteAuthValue(error.code)}`);
   if (error?.message) parts.push(`error_description=${quoteAuthValue(error.message)}`);
   if (isOAuthConfigured()) {
@@ -315,15 +315,15 @@ function bearerChallenge(req: IncomingMessage, error?: HttpAuthError): string {
 function buildProtectedResourceMetadata(req: IncomingMessage): Record<string, unknown> {
   return {
     resource: mcpResourceUrl(req),
-    resource_name: "Verity MCP",
+    resource_name: "Backwork MCP",
     authorization_servers: oauthAuthorizationServers,
     bearer_methods_supported: ["header"],
     scopes_supported: oauthScopes,
   };
 }
 
-// Helper function for making Verity API requests
-async function verityRequest<T>(
+// Helper function for making Backwork API requests
+async function backworkRequest<T>(
   endpoint: string,
   options: {
     method?: "GET" | "POST" | "PATCH" | "DELETE";
@@ -335,7 +335,7 @@ async function verityRequest<T>(
   const { method = "GET", params, body, headers: extraHeaders } = options;
 
   // Build URL with query params
-  const url = new URL(`${VERITY_API_BASE}${endpoint}`);
+  const url = new URL(`${BACKWORK_API_BASE}${endpoint}`);
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== "") {
@@ -345,15 +345,15 @@ async function verityRequest<T>(
   }
 
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${resolveVerityApiKey()}`,
+    Authorization: `Bearer ${resolveBackworkApiKey()}`,
     "Content-Type": "application/json",
     Accept: "application/json",
-    "X-Verity-Client": "mcp",
+    "X-Backwork-Client": "mcp",
     ...extraHeaders,
   };
   const toolName = requestToolName.getStore();
-  if (toolName && !headers["X-Verity-MCP-Tool"]) {
-    headers["X-Verity-MCP-Tool"] = `verity_${toolName}`;
+  if (toolName && !headers["X-Backwork-MCP-Tool"]) {
+    headers["X-Backwork-MCP-Tool"] = `backwork_${toolName}`;
   }
 
   const response = await fetch(url.toString(), {
@@ -378,7 +378,7 @@ async function verityRequest<T>(
   }
 
   if (!response.ok) {
-    throw new VerityApiError({
+    throw new BackworkApiError({
       status: response.status,
       code: data.error?.code,
       message: data.error?.message || `API error: ${response.status}`,
@@ -462,7 +462,7 @@ function dispositionCounts(policies: any[]): string {
 }
 
 function formatToolError(action: string, error: unknown): string {
-  if (error instanceof VerityApiError) {
+  if (error instanceof BackworkApiError) {
     const details = error.details && typeof error.details === "object" ? (error.details as Record<string, unknown>) : {};
     const requiredScopes = asArray(details.required_scopes).map(String);
     const requiredPlan = details.required_plan || details.required_feature || error.requiredPlan || error.upgradeTo;
@@ -538,7 +538,7 @@ function formatCode(code: any): string {
       if (p.jurisdiction) lines.push(`    Jurisdiction: ${p.jurisdiction}`);
       if (p.source_url) lines.push(`    Source: ${p.source_url}`);
     });
-    if (remaining > 0) lines.push(`  ... ${remaining} more policies omitted. Use verity_policy_research for focused evidence.`);
+    if (remaining > 0) lines.push(`  ... ${remaining} more policies omitted. Use backwork_policy_research for focused evidence.`);
   }
 
   if (code.suggestions && code.suggestions.length > 0) {
@@ -643,7 +643,7 @@ function formatPriorAuth(result: any): string {
     });
     if (remaining > 0) {
       lines.push(
-        `\n... ${remaining} more matched policies omitted. Use verity_policy_research with action='get' and policy_id for full evidence.`,
+        `\n... ${remaining} more matched policies omitted. Use backwork_policy_research with action='get' and policy_id for full evidence.`,
       );
     }
   }
@@ -706,7 +706,7 @@ function toolAnnotations(name: string): ToolAnnotations {
   };
 }
 
-function withResponseFormatInput(inputSchema: VerityToolInputSchema = {}): VerityToolInputSchema {
+function withResponseFormatInput(inputSchema: BackworkToolInputSchema = {}): BackworkToolInputSchema {
   if ("response_format" in inputSchema) return inputSchema;
   return {
     ...inputSchema,
@@ -783,26 +783,26 @@ function toolError(message: string): CallToolResult {
 }
 
 function enhanceDescription(name: string, description: string | undefined): string {
-  const baseDescription = description || `${titleizeToolName(name)} in the Verity API.`;
+  const baseDescription = description || `${titleizeToolName(name)} in the Backwork API.`;
   const responseFormatNote =
     "Supports optional response_format: 'markdown' (default) for readable text or 'json' for the returned structuredContent object.";
   return `${baseDescription}\n\n${responseFormatNote}`;
 }
 
-function enhanceToolConfig(name: string, config: VerityToolConfig): VerityToolConfig {
+function enhanceToolConfig(name: string, config: BackworkToolConfig): BackworkToolConfig {
   const title = config.title || toolTitles[name] || titleizeToolName(name);
   return {
     ...config,
     title,
     description: enhanceDescription(name, config.description),
     inputSchema: withResponseFormatInput(config.inputSchema),
-    outputSchema: config.outputSchema || verityToolOutputSchema,
+    outputSchema: config.outputSchema || backworkToolOutputSchema,
     annotations: config.annotations || toolAnnotations(name),
     _meta: config._meta,
   };
 }
 
-function wrapToolHandler(name: string, handler: VerityToolHandler): VerityToolHandler {
+function wrapToolHandler(name: string, handler: BackworkToolHandler): BackworkToolHandler {
   return async (args: unknown, extra: unknown) => {
     const { handlerArgs, responseFormat } = splitResponseFormat(args);
 
@@ -815,9 +815,9 @@ function wrapToolHandler(name: string, handler: VerityToolHandler): VerityToolHa
   };
 }
 
-function createVerityToolRegistrar(server: McpServer): RegisterVerityTool {
+function createBackworkToolRegistrar(server: McpServer): RegisterBackworkTool {
   return (name, config, handler) => {
-    const prefixedName = `verity_${name}`;
+    const prefixedName = `backwork_${name}`;
     const wrappedHandler = wrapToolHandler(name, handler);
     const primaryConfig = enhanceToolConfig(name, config);
 
@@ -1118,7 +1118,7 @@ function formatResearch(result: any): string {
   return lines.join("\n");
 }
 
-function registerWorkflowTools(registerTool: RegisterVerityTool): void {
+function registerWorkflowTools(registerTool: RegisterBackworkTool): void {
   registerTool(
     "coverage_lookup",
     {
@@ -1165,7 +1165,7 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
 
         if (requested.has("code_details")) {
           const endpoint = procedure_codes.length === 1 ? "/codes/lookup" : "/codes/batch";
-          const result = await verityRequest<any>(
+          const result = await backworkRequest<any>(
             endpoint,
             procedure_codes.length === 1
               ? {
@@ -1192,7 +1192,7 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
         }
 
         if (requested.has("prior_auth")) {
-          const result = await verityRequest<any>("/prior-auth/check", {
+          const result = await backworkRequest<any>("/prior-auth/check", {
             method: "POST",
             body: { procedure_codes, diagnosis_codes, payer, state },
           });
@@ -1202,7 +1202,7 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
         }
 
         if (requested.has("claim_risk")) {
-          const result = await verityRequest<any>("/claims/validate", {
+          const result = await backworkRequest<any>("/claims/validate", {
             method: "POST",
             body: {
               procedure_codes,
@@ -1220,7 +1220,7 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
         }
 
         if (requested.has("jurisdiction_compare") || compare_jurisdictions?.length) {
-          const result = await verityRequest<any>("/policies/compare", {
+          const result = await backworkRequest<any>("/policies/compare", {
             method: "POST",
             body: { procedure_codes, jurisdictions: compare_jurisdictions },
           });
@@ -1239,7 +1239,7 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
         }
 
         if (requested.has("spending")) {
-          const result = await verityRequest<any>("/spending/by-code", {
+          const result = await backworkRequest<any>("/spending/by-code", {
             params: procedure_codes.length === 1 ? { code: procedure_codes[0] } : { codes: procedure_codes.join(",") },
           });
           data.spending = result.data;
@@ -1279,7 +1279,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     async ({ action, query, policy_id, policy_type, jurisdiction, payer, status, mode, section, since, change_type, include, limit, cursor }) => {
       try {
         if (action === "search") {
-          const result = await verityRequest<any>("/policies", {
+          const result = await backworkRequest<any>("/policies", {
             params: { q: query, mode, policy_type, jurisdiction, payer, status, limit, cursor, include: normalizeInclude(include) },
           });
           if (!result.data?.length) return toolResult(`No policies found for "${query || "your search"}".`, result.data, result.meta);
@@ -1291,7 +1291,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
 
         if (action === "get") {
           if (!policy_id) return toolError("policy_id is required when action='get'.");
-          const result = await verityRequest<any>(`/policies/${encodeURIComponent(policy_id)}`, {
+          const result = await backworkRequest<any>(`/policies/${encodeURIComponent(policy_id)}`, {
             params: { include: normalizeInclude(include, "criteria,codes") },
           });
           return toolResult(formatPolicy(result.data, true), result.data, result.meta);
@@ -1299,7 +1299,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
 
         if (action === "criteria") {
           if (!query) return toolError("query is required when action='criteria'.");
-          const result = await verityRequest<any>("/coverage/criteria", {
+          const result = await backworkRequest<any>("/coverage/criteria", {
             params: { q: query, section, policy_type, jurisdiction, limit, cursor },
           });
           if (!result.data?.length) return toolResult(`No criteria found for "${query}".`, result.data, result.meta);
@@ -1315,7 +1315,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
         }
 
         if (action === "changes") {
-          const result = await verityRequest<any>("/policies/changes", {
+          const result = await backworkRequest<any>("/policies/changes", {
             params: { since, policy_id, change_type, limit, cursor },
           });
           if (!result.data?.length) return toolResult("No policy changes found for the specified criteria.", result.data, result.meta);
@@ -1329,7 +1329,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
           return toolResult(lines.join("\n"), result.data, result.meta);
         }
 
-        const result = await verityRequest<any>("/jurisdictions");
+        const result = await backworkRequest<any>("/jurisdictions");
         const lines = [`MAC Jurisdictions (${result.data.length} total):\n`];
         result.data.forEach((jur: any) => {
           lines.push(`[${jur.jurisdiction_code}] ${jur.jurisdiction_name || ""}`);
@@ -1371,7 +1371,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
       try {
         const data: Record<string, unknown> = {};
         const lines = ["Claim Validation"];
-        const result = await verityRequest<any>("/claims/validate", {
+        const result = await backworkRequest<any>("/claims/validate", {
           method: "POST",
           body,
           headers: idempotency_key ? { "X-Idempotency-Key": idempotency_key } : undefined,
@@ -1380,7 +1380,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
         lines.push(formatClaimValidation(result.data));
 
         if (policy_id && coverage_parameters) {
-          const evaluation = await verityRequest<any>("/coverage/evaluate", {
+          const evaluation = await backworkRequest<any>("/coverage/evaluate", {
             method: "POST",
             body: { policy_id, parameters: coverage_parameters },
           });
@@ -1415,21 +1415,21 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
       try {
         if (action === "get_research") {
           if (!research_id) return toolError("research_id is required when action='get_research'.");
-          const result = await verityRequest<any>(`/prior-auth/research/${encodeURIComponent(research_id)}`);
+          const result = await backworkRequest<any>(`/prior-auth/research/${encodeURIComponent(research_id)}`);
           return toolResult(formatResearch(result.data), result.data, result.meta);
         }
 
         if (!procedure_codes?.length) return toolError("procedure_codes is required for prior authorization checks and research.");
 
         if (action === "check") {
-          const result = await verityRequest<any>("/prior-auth/check", {
+          const result = await backworkRequest<any>("/prior-auth/check", {
             method: "POST",
             body: { procedure_codes, diagnosis_codes: body.diagnosis_codes, payer: body.payer, state: body.state },
           });
           return toolResult(formatPriorAuth(result.data), result.data, result.meta);
         }
 
-        const result = await verityRequest<any>("/prior-auth/research", {
+        const result = await backworkRequest<any>("/prior-auth/research", {
           method: "POST",
           body: { ...body, procedure_codes },
         });
@@ -1452,11 +1452,11 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     },
     async ({ query, payer, limit }) => {
       try {
-        let result = await verityRequest<any>("/drugs/formulary", { params: { q: query, payer, limit } });
+        let result = await backworkRequest<any>("/drugs/formulary", { params: { q: query, payer, limit } });
         const fallbackQuery = formularyResults(result.data).length === 0 ? simplifyDrugQuery(query) : undefined;
 
         if (fallbackQuery) {
-          const fallbackResult = await verityRequest<any>("/drugs/formulary", { params: { q: fallbackQuery, payer, limit } });
+          const fallbackResult = await backworkRequest<any>("/drugs/formulary", { params: { q: fallbackQuery, payer, limit } });
           if (formularyResults(fallbackResult.data).length > 0) {
             result = {
               ...fallbackResult,
@@ -1500,20 +1500,20 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     async ({ action, change_type, cursor, limit, diff_id, diff_ids, notes }) => {
       try {
         if (action === "stats") {
-          const result = await verityRequest<any>("/compliance/stats");
+          const result = await backworkRequest<any>("/compliance/stats");
           return toolResult(formatComplianceStats(result.data), result.data, result.meta);
         }
         if (action === "list_unreviewed") {
-          const result = await verityRequest<any>("/compliance/unreviewed", { params: { change_type, cursor, limit } });
+          const result = await backworkRequest<any>("/compliance/unreviewed", { params: { change_type, cursor, limit } });
           return toolResult(formatComplianceChanges(result.data, result.meta), result.data, result.meta);
         }
         if (action === "acknowledge") {
           if (diff_id === undefined) return toolError("diff_id is required when action='acknowledge'.");
-          const result = await verityRequest<any>("/compliance/ack", { method: "POST", body: { diff_id, notes } });
+          const result = await backworkRequest<any>("/compliance/ack", { method: "POST", body: { diff_id, notes } });
           return toolResult(formatMutationResult("Acknowledge policy change", result.data), result.data, result.meta);
         }
         if (!diff_ids?.length) return toolError("diff_ids is required when action='bulk_acknowledge'.");
-        const result = await verityRequest<any>("/compliance/ack/bulk", { method: "POST", body: { diff_ids, notes } });
+        const result = await backworkRequest<any>("/compliance/ack/bulk", { method: "POST", body: { diff_ids, notes } });
         return toolResult(formatMutationResult("Bulk acknowledge policy changes", result.data), result.data, result.meta);
       } catch (error) {
         return errorResult(formatToolError("review compliance", error));
@@ -1536,24 +1536,24 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     async ({ action, id, url, events, status }) => {
       try {
         if (action === "list") {
-          const result = await verityRequest<any>("/webhooks");
+          const result = await backworkRequest<any>("/webhooks");
           return toolResult(formatWebhookList(result.data), result.data, result.meta);
         }
         if (action === "create") {
           if (!url || !events?.length) return toolError("url and at least one event are required when action='create'.");
-          const result = await verityRequest<any>("/webhooks", { method: "POST", body: { url, events } });
+          const result = await backworkRequest<any>("/webhooks", { method: "POST", body: { url, events } });
           return toolResult(formatMutationResult("Create webhook", result.data), result.data, result.meta);
         }
         if (id === undefined) return toolError("id is required when action is update, delete, or test.");
         if (action === "update") {
-          const result = await verityRequest<any>(`/webhooks/${id}`, { method: "PATCH", body: { url, events, status } });
+          const result = await backworkRequest<any>(`/webhooks/${id}`, { method: "PATCH", body: { url, events, status } });
           return toolResult(formatMutationResult("Update webhook", result.data), result.data, result.meta);
         }
         if (action === "delete") {
-          const result = await verityRequest<any>(`/webhooks/${id}`, { method: "DELETE" });
+          const result = await backworkRequest<any>(`/webhooks/${id}`, { method: "DELETE" });
           return toolResult(formatMutationResult("Delete webhook", result.data), result.data, result.meta);
         }
-        const result = await verityRequest<any>(`/webhooks/${id}/test`, { method: "POST" });
+        const result = await backworkRequest<any>(`/webhooks/${id}/test`, { method: "POST" });
         return toolResult(formatMutationResult("Test webhook", result.data), result.data, result.meta);
       } catch (error) {
         return errorResult(formatToolError("manage webhooks", error));
@@ -1564,12 +1564,12 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
   registerTool(
     "system_health",
     {
-      description: "Check Verity API health and dependency status. Use for diagnostics, not for coverage research.",
+      description: "Check Backwork API health and dependency status. Use for diagnostics, not for coverage research.",
       inputSchema: {},
     },
     async () => {
       try {
-        const result = await verityRequest<any>("/health");
+        const result = await backworkRequest<any>("/health");
         return toolResult(formatJson(result.data), result.data, result.meta);
       } catch (error) {
         return errorResult(formatToolError("check health", error));
@@ -1578,12 +1578,12 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
   );
 }
 
-function createVerityMcpServer(): McpServer {
+function createBackworkMcpServer(): McpServer {
   const server = new McpServer({
-    name: "verity",
-    version: "1.1.0",
+    name: "backwork",
+    version: "2.0.0",
   });
-  const registerTool = createVerityToolRegistrar(server);
+  const registerTool = createBackworkToolRegistrar(server);
 
   registerWorkflowTools(registerTool);
 
@@ -1612,11 +1612,11 @@ function extractBearerToken(req: IncomingMessage): string | undefined {
   return match?.[1]?.trim();
 }
 
-function looksLikeVerityApiKey(token: string): boolean {
-  return /^vrt_(live|test)_[A-Za-z0-9_-]+$/.test(token);
+function looksLikeBackworkApiKey(token: string): boolean {
+  return /^bwk_(live|test)_[A-Za-z0-9_-]+$/.test(token);
 }
 
-function authInfoForApiKey(apiKey: string, clientId = "verity-api-key"): AuthInfo {
+function authInfoForApiKey(apiKey: string, clientId = "backwork-api-key"): AuthInfo {
   return {
     token: apiKey,
     clientId,
@@ -1696,7 +1696,7 @@ async function introspectOAuthToken(token: string, req: IncomingMessage): Promis
 
 async function validateOAuthAccessToken(token: string, req: IncomingMessage): Promise<HttpAuthContext> {
   if (!isOAuthConfigured()) {
-    throw new HttpAuthError(500, "server_error", "OAuth auth mode requires VERITY_MCP_OAUTH_AUTHORIZATION_SERVERS.");
+    throw new HttpAuthError(500, "server_error", "OAuth auth mode requires BACKWORK_MCP_OAUTH_AUTHORIZATION_SERVERS.");
   }
 
   const tokenInfo = await introspectOAuthToken(token, req);
@@ -1720,7 +1720,7 @@ async function validateOAuthAccessToken(token: string, req: IncomingMessage): Pr
 
   const resource = new URL(mcpResourceUrl(req));
   return {
-    verityCredential: typeof credentialFromClaim === "string" ? credentialFromClaim : token,
+    backworkCredential: typeof credentialFromClaim === "string" ? credentialFromClaim : token,
     authInfo: {
       token,
       clientId: String(tokenInfo.client_id || tokenInfo.azp || tokenInfo.sub || "oauth-client"),
@@ -1739,9 +1739,9 @@ async function validateOAuthAccessToken(token: string, req: IncomingMessage): Pr
 async function resolveHttpAuth(req: IncomingMessage): Promise<HttpAuthContext | undefined> {
   const bearerToken = extractBearerToken(req);
   if (bearerToken) {
-    if (httpAuthMode === "api-key" || (httpAuthMode === "dual" && looksLikeVerityApiKey(bearerToken))) {
+    if (httpAuthMode === "api-key" || (httpAuthMode === "dual" && looksLikeBackworkApiKey(bearerToken))) {
       return {
-        verityCredential: bearerToken,
+        backworkCredential: bearerToken,
         authInfo: authInfoForApiKey(bearerToken),
       };
     }
@@ -1749,13 +1749,13 @@ async function resolveHttpAuth(req: IncomingMessage): Promise<HttpAuthContext | 
     return validateOAuthAccessToken(bearerToken, req);
   }
 
-  if (!allowEnvKeyForHttp || !process.env.VERITY_API_KEY) return undefined;
+  if (!allowEnvKeyForHttp || !process.env.BACKWORK_API_KEY) return undefined;
 
   const requestHost = normalizeHost(req.headers.host);
   if (requestHost && isPrivateHost(httpHost) && isPrivateHost(requestHost)) {
     return {
-      verityCredential: process.env.VERITY_API_KEY,
-      authInfo: authInfoForApiKey(process.env.VERITY_API_KEY, "verity-env-api-key"),
+      backworkCredential: process.env.BACKWORK_API_KEY,
+      authInfo: authInfoForApiKey(process.env.BACKWORK_API_KEY, "backwork-env-api-key"),
     };
   }
 
@@ -1797,7 +1797,7 @@ function rejectUnsafeHttpRequest(req: IncomingMessage, res: ServerResponse): boo
     if (!isAllowedHost(req)) {
       sendJson(req, res, 421, {
         error: "host_not_allowed",
-        message: "Configure VERITY_MCP_ALLOWED_HOSTS or VERITY_MCP_PUBLIC_HOST to allow this Host.",
+        message: "Configure BACKWORK_MCP_ALLOWED_HOSTS or BACKWORK_MCP_PUBLIC_HOST to allow this Host.",
       });
       return true;
     }
@@ -1805,7 +1805,7 @@ function rejectUnsafeHttpRequest(req: IncomingMessage, res: ServerResponse): boo
     if (!isAllowedOrigin(req)) {
       sendJson(req, res, 403, {
         error: "origin_not_allowed",
-        message: "Configure VERITY_MCP_ALLOWED_ORIGINS to allow this Origin.",
+        message: "Configure BACKWORK_MCP_ALLOWED_ORIGINS to allow this Origin.",
       });
       return true;
     }
@@ -1818,7 +1818,7 @@ function rejectUnsafeHttpRequest(req: IncomingMessage, res: ServerResponse): boo
   if (!isAllowedHost(req)) {
     sendJson(req, res, 421, {
       error: "host_not_allowed",
-      message: "Configure VERITY_MCP_ALLOWED_HOSTS or VERITY_MCP_PUBLIC_HOST to allow this Host.",
+      message: "Configure BACKWORK_MCP_ALLOWED_HOSTS or BACKWORK_MCP_PUBLIC_HOST to allow this Host.",
     });
     return true;
   }
@@ -1826,7 +1826,7 @@ function rejectUnsafeHttpRequest(req: IncomingMessage, res: ServerResponse): boo
   if (!isAllowedOrigin(req)) {
     sendJson(req, res, 403, {
       error: "origin_not_allowed",
-      message: "Configure VERITY_MCP_ALLOWED_ORIGINS to allow this Origin.",
+      message: "Configure BACKWORK_MCP_ALLOWED_ORIGINS to allow this Origin.",
     });
     return true;
   }
@@ -1864,12 +1864,12 @@ export function handleRootRequest(req: IncomingMessage, res: ServerResponse): vo
   }
 
   sendJson(req, res, 200, {
-    name: "verity-mcp",
+    name: "backwork-mcp",
     transport: "streamable-http",
     mcp_url: httpPath,
     authentication: isOAuthConfigured()
       ? "Authenticate with OAuth and send Authorization: Bearer <access_token> with each MCP request."
-      : "Send Authorization: Bearer <VERITY_API_KEY> with each MCP request.",
+      : "Send Authorization: Bearer <BACKWORK_API_KEY> with each MCP request.",
     oauth_protected_resource_metadata: isOAuthConfigured() ? oauthProtectedResourceMetadataUrl(req) : undefined,
   });
 }
@@ -1888,7 +1888,7 @@ export function handleOAuthProtectedResourceMetadataRequest(req: IncomingMessage
   if (!isOAuthConfigured()) {
     sendJson(req, res, 404, {
       error: "oauth_not_configured",
-      message: "Set VERITY_MCP_OAUTH_AUTHORIZATION_SERVERS to enable OAuth protected resource metadata.",
+      message: "Set BACKWORK_MCP_OAUTH_AUTHORIZATION_SERVERS to enable OAuth protected resource metadata.",
     });
     return;
   }
@@ -1928,7 +1928,7 @@ export async function handleMcpEndpointRequest(req: IncomingMessage, res: Server
       error: "missing_bearer_token",
       message: isOAuthConfigured()
         ? "Authenticate with OAuth and send Authorization: Bearer <access_token> with the MCP request."
-        : "Send Authorization: Bearer <VERITY_API_KEY> with the MCP request.",
+        : "Send Authorization: Bearer <BACKWORK_API_KEY> with the MCP request.",
     });
     return;
   }
@@ -1946,9 +1946,9 @@ export async function handleMcpEndpointRequest(req: IncomingMessage, res: Server
 
   try {
     const body = await readRequestBody(authenticatedReq);
-    const server = createVerityMcpServer();
+    const server = createBackworkMcpServer();
     await server.connect(transport);
-    await requestApiKey.run(authContext.verityCredential, () => transport.handleRequest(authenticatedReq, res, body));
+    await requestApiKey.run(authContext.backworkCredential, () => transport.handleRequest(authenticatedReq, res, body));
   } catch (error) {
     if (!isInvalidJsonError(error)) {
       console.error("Error handling MCP HTTP request:", error);
@@ -2002,16 +2002,16 @@ export async function handleHttpRequest(req: IncomingMessage, res: ServerRespons
 }
 
 async function startStdioServer(): Promise<void> {
-  if (!process.env.VERITY_API_KEY) {
-    console.error("Error: VERITY_API_KEY environment variable is required for stdio transport");
-    console.error("Set it with: export VERITY_API_KEY=vrt_live_YOUR_KEY_HERE");
+  if (!process.env.BACKWORK_API_KEY) {
+    console.error("Error: BACKWORK_API_KEY environment variable is required for stdio transport");
+    console.error("Set it with: export BACKWORK_API_KEY=bwk_live_YOUR_KEY_HERE");
     process.exit(1);
   }
 
-  const server = createVerityMcpServer();
+  const server = createBackworkMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Verity MCP Server running on stdio");
+  console.error("Backwork MCP Server running on stdio");
 }
 
 async function startHttpServer(): Promise<void> {
@@ -2022,7 +2022,7 @@ async function startHttpServer(): Promise<void> {
   const httpServer = createServer(handleHttpRequest);
 
   httpServer.listen(httpPort, httpHost, () => {
-    console.error(`Verity MCP Server running on Streamable HTTP: http://${httpHost}:${httpPort}${httpPath}`);
+    console.error(`Backwork MCP Server running on Streamable HTTP: http://${httpHost}:${httpPort}${httpPath}`);
   });
 }
 

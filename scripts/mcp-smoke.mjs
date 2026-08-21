@@ -18,11 +18,11 @@ const transport = new StdioClientTransport({
   args: ["build/src/index.js"],
   env: {
     ...process.env,
-    VERITY_API_KEY: "vrt_test_dummy",
+    BACKWORK_API_KEY: "bwk_test_dummy",
   },
 });
 
-const client = new Client({ name: "verity-mcp-smoke", version: "1.0.0" });
+const client = new Client({ name: "backwork-mcp-smoke", version: "1.0.0" });
 
 try {
   await client.connect(transport);
@@ -32,7 +32,7 @@ try {
   assert.equal(tools.length, toolNames.length, "expected one prefixed tool per supported workflow");
 
   for (const toolName of toolNames) {
-    const primaryName = `verity_${toolName}`;
+    const primaryName = `backwork_${toolName}`;
     const primary = byName.get(primaryName);
 
     assert.ok(primary, `missing primary tool ${primaryName}`);
@@ -47,12 +47,12 @@ try {
     assert.equal(primary.annotations?.openWorldHint, true, `${primaryName} should mark external API access`);
   }
 
-  assert.equal(byName.get("verity_policy_research")?.annotations?.readOnlyHint, true);
-  assert.equal(byName.get("verity_webhook_management")?.annotations?.readOnlyHint, false);
-  assert.equal(byName.get("verity_webhook_management")?.annotations?.destructiveHint, true);
+  assert.equal(byName.get("backwork_policy_research")?.annotations?.readOnlyHint, true);
+  assert.equal(byName.get("backwork_webhook_management")?.annotations?.readOnlyHint, false);
+  assert.equal(byName.get("backwork_webhook_management")?.annotations?.destructiveHint, true);
 
   const invalidPolicyCall = await client.callTool({
-    name: "verity_policy_research",
+    name: "backwork_policy_research",
     arguments: { action: "get", response_format: "json" },
   });
   assert.equal(invalidPolicyCall.isError, true, "local validation errors should be tool errors");
