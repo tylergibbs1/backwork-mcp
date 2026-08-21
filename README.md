@@ -153,7 +153,7 @@ This repo can deploy as an API-only Vercel project. The production project uses:
 BACKWORK_MCP_AUTH_MODE=oauth
 BACKWORK_MCP_PUBLIC_HOST=backworkhealth.com
 BACKWORK_MCP_PUBLIC_URL=https://backworkhealth.com
-BACKWORK_MCP_ALLOWED_HOSTS=backworkhealth.com,backwork-mcp.vercel.app
+BACKWORK_MCP_ALLOWED_HOSTS=backworkhealth.com,mcp.backworkhealth.com,backwork-mcp.vercel.app
 BACKWORK_MCP_OAUTH_AUTHORIZATION_SERVERS=https://backworkhealth.com
 BACKWORK_MCP_OAUTH_RESOURCE=https://backworkhealth.com/mcp
 BACKWORK_MCP_OAUTH_SCOPES="backwork:mcp read"
