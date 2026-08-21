@@ -1,6 +1,6 @@
 {
   "name": "@backwork/mcp",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "MCP server for the Backwork healthcare API - Medicare coverage policies, prior auth, and medical codes",
   "type": "module",
   "bin": {
@@ -41,5 +41,13 @@
     "coverage",
     "prior-auth"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tylergibbs1/backwork-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tylergibbs1/backwork-mcp/issues"
+  },
+  "homepage": "https://backworkhealth.com",
   "license": "MIT"
 }
