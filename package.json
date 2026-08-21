@@ -1,10 +1,10 @@
 {
-  "name": "@backwork/verity-mcp",
-  "version": "1.1.1",
-  "description": "MCP server for Verity healthcare API - Medicare coverage policies, prior auth, and medical codes",
+  "name": "@backwork/mcp",
+  "version": "2.0.0",
+  "description": "MCP server for the Backwork healthcare API - Medicare coverage policies, prior auth, and medical codes",
   "type": "module",
   "bin": {
-    "verity-mcp": "build/src/index.js"
+    "backwork-mcp": "build/src/index.js"
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('build', { recursive: true, force: true })\"",
@@ -37,7 +37,7 @@
     "mcp",
     "healthcare",
     "medicare",
-    "verity",
+    "backwork",
     "coverage",
     "prior-auth"
   ],

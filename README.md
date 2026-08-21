@@ -1,86 +1,74 @@
-# Verity MCP Server
+# Backwork MCP Server
 
-Official Model Context Protocol (MCP) server for the [Verity API](https://verity.backworkai.com). It gives AI assistants controlled access to Medicare coverage policies, medical code intelligence, prior authorization checks, claim validation, compliance review, drug formulary evidence, and webhook operations.
+Official Model Context Protocol (MCP) server for the [Backwork API](https://backworkhealth.com). It gives AI assistants controlled access to Medicare coverage policies, medical code intelligence, prior authorization checks, claim validation, compliance review, drug formulary evidence, and webhook operations.
 
 ## Current Setup
 
-For Claude Code, use the hosted Streamable HTTP MCP endpoint with OAuth. This does not require copying a Verity API key into Claude Code:
+For Claude Code, use the hosted Streamable HTTP MCP endpoint with OAuth. This does not require copying a Backwork API key into Claude Code:
 
 ```bash
-claude mcp remove verity 2>/dev/null || true
-claude mcp add --transport http --scope user verity https://mcp.verity.backworkai.com/mcp
+claude mcp remove backwork 2>/dev/null || true
+claude mcp add --transport http --scope user backwork https://backworkhealth.com/mcp
 ```
 
-Then start Claude Code, run `/mcp`, select `verity`, complete the browser login, and approve the Verity consent screen.
+Then start Claude Code, run `/mcp`, select `backwork`, complete the browser login, and approve the Backwork consent screen.
 
-Codex currently uses the same hosted endpoint with a Verity API key:
+Codex currently uses the local stdio server with a Backwork API key:
 
 ```bash
-export VERITY_API_KEY=vrt_live_YOUR_API_KEY
-codex mcp add verity --url https://mcp.verity.backworkai.com/mcp --bearer-token-env-var VERITY_API_KEY
+export BACKWORK_API_KEY=bwk_live_YOUR_API_KEY
+codex mcp add backwork --env BACKWORK_API_KEY=$BACKWORK_API_KEY -- npx -y @backwork/mcp
 ```
 
 Use the local stdio setup when your MCP client does not support remote Streamable HTTP yet, or when you want to run the server entirely on your machine.
 
 ## Codex
 
-Codex supports Streamable HTTP MCP servers and can source the bearer token from an environment variable:
+Use local stdio with a Backwork API key:
 
 ```bash
-export VERITY_API_KEY=vrt_live_YOUR_API_KEY
-codex mcp add verity --url https://mcp.verity.backworkai.com/mcp --bearer-token-env-var VERITY_API_KEY
+export BACKWORK_API_KEY=bwk_live_YOUR_API_KEY
+codex mcp add backwork --env BACKWORK_API_KEY=$BACKWORK_API_KEY -- npx -y @backwork/mcp
 ```
 
-For local stdio:
-
-```bash
-codex mcp add verity --env VERITY_API_KEY=vrt_live_YOUR_API_KEY -- npx -y @backwork/verity-mcp
-```
+The hosted Backwork MCP endpoint requires OAuth. Do not use a Backwork API key as a bearer token against `https://backworkhealth.com/mcp`. If you operate a private self-hosted HTTP server in API-key or dual-auth mode, Codex can connect to that private URL with `--bearer-token-env-var`.
 
 ## Claude Code
 
 For hosted Streamable HTTP, use OAuth:
 
 ```bash
-claude mcp remove verity 2>/dev/null || true
-claude mcp add --transport http --scope user verity https://mcp.verity.backworkai.com/mcp
+claude mcp remove backwork 2>/dev/null || true
+claude mcp add --transport http --scope user backwork https://backworkhealth.com/mcp
 ```
 
-Then run `claude`, open `/mcp`, and authenticate `verity`. Claude Code discovers the OAuth protected-resource metadata, opens your browser, sends you through Verity login, and stores the OAuth token after you approve the consent screen.
+Then run `claude`, open `/mcp`, and authenticate `backwork`. Claude Code discovers the OAuth protected-resource metadata, opens your browser, sends you through Backwork login, and stores the OAuth token after you approve the consent screen.
 
 Verify the server is configured:
 
 ```bash
 claude mcp list
-claude mcp get verity
+claude mcp get backwork
 ```
 
 If OAuth discovery needs to be pinned explicitly, add the same server as JSON:
 
 ```bash
-claude mcp remove verity 2>/dev/null || true
-claude mcp add-json verity '{
+claude mcp remove backwork 2>/dev/null || true
+claude mcp add-json backwork '{
   "type": "http",
-  "url": "https://mcp.verity.backworkai.com/mcp",
+  "url": "https://backworkhealth.com/mcp",
   "oauth": {
-    "scopes": "verity:mcp read"
+    "scopes": "backwork:mcp read"
   }
 }'
 ```
 
-For older clients or API-key fallback:
+For older clients that cannot complete remote OAuth, use local stdio:
 
 ```bash
-export VERITY_API_KEY=vrt_live_YOUR_API_KEY
-claude mcp add --transport http verity https://mcp.verity.backworkai.com/mcp --header "Authorization: Bearer $VERITY_API_KEY"
-```
-
-Claude stores HTTP headers in its MCP config. Use a scoped Verity key and rotate it if you later remove this server.
-
-For local stdio:
-
-```bash
-claude mcp add verity -e VERITY_API_KEY=vrt_live_YOUR_API_KEY -- npx -y @backwork/verity-mcp
+export BACKWORK_API_KEY=bwk_live_YOUR_API_KEY
+claude mcp add backwork -e BACKWORK_API_KEY=$BACKWORK_API_KEY -- npx -y @backwork/mcp
 ```
 
 ## Cursor, VS Code, Windsurf, and Other MCP Clients
@@ -90,26 +78,26 @@ For clients that only support stdio commands:
 ```json
 {
   "mcpServers": {
-    "verity": {
+    "backwork": {
       "command": "npx",
-      "args": ["-y", "@backwork/verity-mcp"],
+      "args": ["-y", "@backwork/mcp"],
       "env": {
-        "VERITY_API_KEY": "vrt_live_YOUR_API_KEY"
+        "BACKWORK_API_KEY": "bwk_live_YOUR_API_KEY"
       }
     }
   }
 }
 ```
 
-For clients that support remote URLs and headers, set the bearer header using the client's documented secret or environment mechanism. If the client only accepts static JSON, replace the placeholder directly:
+The hosted Backwork MCP endpoint requires OAuth. For clients that support only remote URLs and static headers, deploy a private self-hosted server in API-key or dual-auth mode and set the bearer header using the client's documented secret mechanism. If the client only accepts static JSON, replace the placeholder directly:
 
 ```json
 {
   "mcpServers": {
-    "verity": {
-      "url": "https://mcp.verity.backworkai.com/mcp",
+    "backwork": {
+      "url": "https://your-private-mcp.example.com/mcp",
       "headers": {
-        "Authorization": "Bearer vrt_live_YOUR_API_KEY"
+        "Authorization": "Bearer bwk_live_YOUR_API_KEY"
       }
     }
   }
@@ -121,8 +109,8 @@ For clients that support remote URLs and headers, set the bearer header using th
 Run a Streamable HTTP server:
 
 ```bash
-git clone https://github.com/backworkai/verity_mcp.git
-cd verity_mcp
+git clone https://github.com/tylergibbs1/backwork-mcp.git
+cd backwork-mcp
 npm install
 npm run build
 npm run start:http
@@ -132,46 +120,46 @@ Defaults:
 
 | Setting | Default | Override |
 | --- | --- | --- |
-| Transport | `stdio` | `--http` or `VERITY_MCP_TRANSPORT=http` |
-| Host | `127.0.0.1` | `--host` or `VERITY_MCP_HOST` |
-| Port | `3000` | `--port` or `VERITY_MCP_PORT` or `PORT` |
-| MCP path | `/mcp` | `--path` or `VERITY_MCP_PATH` |
-| Allowed hosts | loopback/private hosts, `VERCEL_URL`, or configured public host | `VERITY_MCP_ALLOWED_HOSTS` or `VERITY_MCP_PUBLIC_HOST` |
+| Transport | `stdio` | `--http` or `BACKWORK_MCP_TRANSPORT=http` |
+| Host | `127.0.0.1` | `--host` or `BACKWORK_MCP_HOST` |
+| Port | `3000` | `--port` or `BACKWORK_MCP_PORT` or `PORT` |
+| MCP path | `/mcp` | `--path` or `BACKWORK_MCP_PATH` |
+| Allowed hosts | loopback/private hosts, `VERCEL_URL`, or configured public host | `BACKWORK_MCP_ALLOWED_HOSTS` or `BACKWORK_MCP_PUBLIC_HOST` |
 
-HTTP mode requires `Authorization: Bearer` per request. By default this bearer is a Verity API key for backward compatibility. For hosted remote MCP deployments, enable OAuth protected-resource discovery so Claude-compatible clients can authenticate users through your authorization server:
+HTTP mode requires `Authorization: Bearer` per request. By default this bearer is a Backwork API key. For hosted remote MCP deployments, enable OAuth protected-resource discovery so Claude-compatible clients can authenticate users through your authorization server:
 
 ```bash
-VERITY_MCP_AUTH_MODE=oauth \
-VERITY_MCP_OAUTH_AUTHORIZATION_SERVERS=https://verity.backworkai.com \
-VERITY_MCP_OAUTH_SCOPES="verity:mcp read" \
+BACKWORK_MCP_AUTH_MODE=oauth \
+BACKWORK_MCP_OAUTH_AUTHORIZATION_SERVERS=https://backworkhealth.com \
+BACKWORK_MCP_OAUTH_SCOPES="backwork:mcp read" \
 npm run start:http
 ```
 
-The server publishes OAuth Protected Resource Metadata at `/.well-known/oauth-protected-resource` and includes that URL in `WWW-Authenticate` challenges. If your Verity API accepts OAuth access tokens directly, no extra mapping is needed; the MCP server forwards the OAuth bearer downstream. If your authorization server exposes a Verity API key in token introspection, set `VERITY_MCP_OAUTH_INTROSPECTION_URL` and `VERITY_MCP_OAUTH_API_KEY_CLAIM` to validate the access token and map it to the downstream Verity credential.
+The server publishes OAuth Protected Resource Metadata at `/.well-known/oauth-protected-resource` and includes that URL in `WWW-Authenticate` challenges. If your Backwork API accepts OAuth access tokens directly, no extra mapping is needed; the MCP server forwards the OAuth bearer downstream. If your authorization server exposes a Backwork API key in token introspection, set `BACKWORK_MCP_OAUTH_INTROSPECTION_URL` and `BACKWORK_MCP_OAUTH_API_KEY_CLAIM` to validate the access token and map it to the downstream Backwork credential.
 
 For a private single-tenant deployment where the server environment supplies the key, set:
 
 ```bash
-VERITY_MCP_ALLOW_ENV_KEY=true VERITY_API_KEY=vrt_live_YOUR_API_KEY npm run start:http
+BACKWORK_MCP_ALLOW_ENV_KEY=true BACKWORK_API_KEY=bwk_live_YOUR_API_KEY npm run start:http
 ```
 
-Only use `VERITY_MCP_ALLOW_ENV_KEY=true` on loopback or private-network deployments protected by network access control. Public deployments should require a bearer token per request, set `VERITY_MCP_ALLOWED_HOSTS`/`VERITY_MCP_PUBLIC_HOST`, and set `VERITY_MCP_ALLOWED_ORIGINS` only to exact browser origins that may connect.
+Only use `BACKWORK_MCP_ALLOW_ENV_KEY=true` on loopback or private-network deployments protected by network access control. Public deployments should require a bearer token per request, set `BACKWORK_MCP_ALLOWED_HOSTS`/`BACKWORK_MCP_PUBLIC_HOST`, and set `BACKWORK_MCP_ALLOWED_ORIGINS` only to exact browser origins that may connect.
 
 ### Vercel Hosting
 
 This repo can deploy as an API-only Vercel project. The production project uses:
 
 ```bash
-VERITY_MCP_AUTH_MODE=oauth
-VERITY_MCP_PUBLIC_HOST=mcp.verity.backworkai.com
-VERITY_MCP_PUBLIC_URL=https://mcp.verity.backworkai.com
-VERITY_MCP_ALLOWED_HOSTS=mcp.verity.backworkai.com,verity-mcp.vercel.app
-VERITY_MCP_OAUTH_AUTHORIZATION_SERVERS=https://verity.backworkai.com
-VERITY_MCP_OAUTH_RESOURCE=https://mcp.verity.backworkai.com/mcp
-VERITY_MCP_OAUTH_SCOPES="verity:mcp read"
-VERITY_MCP_OAUTH_REQUIRED_SCOPES=verity:mcp
-VERITY_MCP_OAUTH_INTROSPECTION_URL=https://verity.backworkai.com/api/oauth/introspect
-VERITY_MCP_OAUTH_EXPECTED_AUDIENCE=https://mcp.verity.backworkai.com/mcp
+BACKWORK_MCP_AUTH_MODE=oauth
+BACKWORK_MCP_PUBLIC_HOST=backworkhealth.com
+BACKWORK_MCP_PUBLIC_URL=https://backworkhealth.com
+BACKWORK_MCP_ALLOWED_HOSTS=backworkhealth.com,backwork-mcp.vercel.app
+BACKWORK_MCP_OAUTH_AUTHORIZATION_SERVERS=https://backworkhealth.com
+BACKWORK_MCP_OAUTH_RESOURCE=https://backworkhealth.com/mcp
+BACKWORK_MCP_OAUTH_SCOPES="backwork:mcp read"
+BACKWORK_MCP_OAUTH_REQUIRED_SCOPES=backwork:mcp
+BACKWORK_MCP_OAUTH_INTROSPECTION_URL=https://backworkhealth.com/api/oauth/introspect
+BACKWORK_MCP_OAUTH_EXPECTED_AUDIENCE=https://backworkhealth.com/mcp
 ```
 
 The Vercel functions expose:
@@ -183,15 +171,15 @@ The Vercel functions expose:
 | `/.well-known/oauth-protected-resource` | OAuth protected-resource metadata when OAuth is configured |
 | `/` | Basic endpoint metadata |
 
-The Verity web app that issues OAuth tokens must also be configured:
+The Backwork web app that issues OAuth tokens must also be configured:
 
 ```bash
-VERITY_OAUTH_ISSUER=https://verity.backworkai.com
-VERITY_OAUTH_SIGNING_SECRET=<generate with: openssl rand -base64 48>
-VERITY_MCP_RESOURCE=https://mcp.verity.backworkai.com/mcp
+BACKWORK_OAUTH_ISSUER=https://backworkhealth.com
+BACKWORK_OAUTH_SIGNING_SECRET=<generate with: openssl rand -base64 48>
+BACKWORK_MCP_RESOURCE=https://backworkhealth.com/mcp
 ```
 
-Production OAuth discovery fails closed unless `VERITY_OAUTH_SIGNING_SECRET` is at least 32 characters and Redis or Vercel KV is configured for one-time consent and authorization-code storage.
+Production OAuth discovery fails closed unless `BACKWORK_OAUTH_SIGNING_SECRET` is at least 32 characters and Redis or Vercel KV is configured for one-time consent and authorization-code storage.
 
 Health check:
 
@@ -204,7 +192,7 @@ curl http://localhost:3000/health
 ```bash
 npm install
 npm run build
-VERITY_API_KEY=vrt_live_YOUR_API_KEY npm start
+BACKWORK_API_KEY=bwk_live_YOUR_API_KEY npm start
 ```
 
 Useful commands:
@@ -218,20 +206,20 @@ Requires Node.js 18 or newer.
 
 ## Available Tools
 
-Tool names use the `verity_` prefix for discoverability when this server is installed alongside other MCP servers. The default surface is intentionally workflow-level rather than a 1:1 API wrapper, so agents see fewer choices and common tasks require fewer tool calls.
+Tool names use the `backwork_` prefix for discoverability when this server is installed alongside other MCP servers. The default surface is intentionally workflow-level rather than a 1:1 API wrapper, so agents see fewer choices and common tasks require fewer tool calls.
 
-All tools include `title`, `description`, `inputSchema`, `outputSchema`, and MCP annotations. Successful calls return readable text plus `structuredContent` with `message`, and when available, raw Verity API `data` and `meta`. Tool-level failures return `isError: true`. For tools that combine read and write actions, annotations are conservative at the tool level.
+All tools include `title`, `description`, `inputSchema`, `outputSchema`, and MCP annotations. Successful calls return readable text plus `structuredContent` with `message`, and when available, raw Backwork API `data` and `meta`. Tool-level failures return `isError: true`. For tools that combine read and write actions, annotations are conservative at the tool level.
 
 | Primary tool | Purpose |
 | --- | --- |
-| `verity_coverage_lookup` | Look up procedure codes and combine code details, policy evidence, prior authorization, claim risk, jurisdiction comparison, and spending evidence |
-| `verity_policy_research` | Search policies, fetch one policy, search extracted criteria, review policy changes, or map MAC jurisdictions |
-| `verity_claim_validation` | Validate claim coverage, documentation requirements, denial risk, and optional policy-specific criteria |
-| `verity_prior_auth_research` | Check Medicare prior authorization, start payer website research, or poll an async research task |
-| `verity_drug_formulary_research` | Search commercial pharmacy-benefit evidence from CVS Caremark, Express Scripts, and UnitedHealthcare / Optum Rx |
-| `verity_compliance_review` | Review compliance stats, list unreviewed policy changes, or acknowledge changes |
-| `verity_webhook_management` | List, create, update, delete, or test webhook endpoints |
-| `verity_system_health` | Check Verity API health and dependency status |
+| `backwork_coverage_lookup` | Look up procedure codes and combine code details, policy evidence, prior authorization, claim risk, jurisdiction comparison, and spending evidence |
+| `backwork_policy_research` | Search policies, fetch one policy, search extracted criteria, review policy changes, or map MAC jurisdictions |
+| `backwork_claim_validation` | Validate claim coverage, documentation requirements, denial risk, and optional policy-specific criteria |
+| `backwork_prior_auth_research` | Check Medicare prior authorization, start payer website research, or poll an async research task |
+| `backwork_drug_formulary_research` | Search commercial pharmacy-benefit evidence from CVS Caremark, Express Scripts, and UnitedHealthcare / Optum Rx |
+| `backwork_compliance_review` | Review compliance stats, list unreviewed policy changes, or acknowledge changes |
+| `backwork_webhook_management` | List, create, update, delete, or test webhook endpoints |
+| `backwork_system_health` | Check Backwork API health and dependency status |
 
 ### Response Format
 
@@ -273,53 +261,53 @@ npm test
 
 The smoke test starts the built stdio server with a dummy key, verifies the 8 workflow tools, checks titles, schemas, annotations, output schemas, `response_format`, and verifies local validation failures are reported with `isError: true`.
 
-The `evals/` directory includes a tool-discoverability evaluation and a read-only data evaluation built from fixed source-backed policy/code records. Refresh the read-only answers intentionally when Verity source data is updated.
+The `evals/` directory includes a tool-discoverability evaluation and a read-only data evaluation built from fixed source-backed policy/code records. Refresh the read-only answers intentionally when Backwork source data is updated.
 
 ## Release
 
-The package publishes to npm as `@backwork/verity-mcp`.
+The package publishes to npm as `@backwork/mcp`.
 
-The npm package is available under the Backwork scope as `@backwork/verity-mcp`.
+The npm package is available under the Backwork scope as `@backwork/mcp`.
 
-1. Configure npm Trusted Publishing for `backworkai/verity_mcp`, workflow `release.yml`, environment `npm`, package `@backwork/verity-mcp`.
+1. Configure npm Trusted Publishing for `tylergibbs1/backwork-mcp`, workflow `release.yml`, environment `npm`, package `@backwork/mcp`.
 2. Update `package.json` and `package-lock.json` to the new version.
-3. Push a matching tag, for example `v1.1.1`.
+3. Push a matching tag, for example `v2.0.0`.
 4. The release workflow installs with `npm ci`, runs the build/smoke test, verifies `npm pack --dry-run`, and publishes with npm provenance.
 
 ## Environment Variables
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `VERITY_API_KEY` | Stdio yes; HTTP no | Verity API key. In HTTP mode, prefer `Authorization: Bearer` per request. |
-| `VERITY_API_BASE` | No | Override the API base URL. |
-| `VERITY_MCP_TRANSPORT` | No | `stdio` or `http`. |
-| `VERITY_MCP_HOST` | No | HTTP bind host. Defaults to `127.0.0.1`. |
-| `VERITY_MCP_PORT` | No | HTTP bind port. |
-| `VERITY_MCP_PATH` | No | HTTP MCP path. |
-| `VERITY_MCP_ALLOWED_ORIGINS` | No | Comma-separated allowed HTTP origins. Loopback origins are allowed for loopback requests. |
-| `VERITY_MCP_ALLOW_ORIGIN` | No | Backward-compatible alias for `VERITY_MCP_ALLOWED_ORIGINS`. |
-| `VERITY_MCP_ALLOWED_HOSTS` | No | Comma-separated allowed HTTP Host headers for public deployments. |
-| `VERITY_MCP_ALLOW_HOST` | No | Backward-compatible alias for `VERITY_MCP_ALLOWED_HOSTS`. |
-| `VERITY_MCP_PUBLIC_HOST` | No | Primary public host allowed for HTTP requests. |
-| `VERITY_MCP_PUBLIC_URL` | No | Canonical public origin for OAuth metadata, e.g. `https://mcp.verity.backworkai.com`. |
-| `VERITY_MCP_ALLOW_ENV_KEY` | No | Allow private HTTP requests without bearer auth to use `VERITY_API_KEY`. |
-| `VERITY_MCP_AUTH_MODE` | No | HTTP bearer mode: `api-key`, `oauth`, or `dual`. Defaults to `dual` when OAuth authorization servers are configured, otherwise `api-key`. |
-| `VERITY_MCP_OAUTH_AUTHORIZATION_SERVERS` | OAuth | Comma-separated OAuth issuer / authorization server URLs advertised in protected-resource metadata. |
-| `VERITY_MCP_OAUTH_RESOURCE` | No | Override the RFC 8707 resource identifier. Defaults to the public MCP URL. |
-| `VERITY_MCP_OAUTH_SCOPES` | No | Space- or comma-separated scopes advertised to clients. Defaults to `verity:mcp`. |
-| `VERITY_MCP_OAUTH_REQUIRED_SCOPES` | No | Space- or comma-separated scopes required after token introspection. |
-| `VERITY_MCP_OAUTH_INTROSPECTION_URL` | No | RFC 7662 token introspection endpoint used to validate OAuth access tokens. |
-| `VERITY_MCP_OAUTH_INTROSPECTION_CLIENT_ID` | No | Client ID for introspection basic auth. |
-| `VERITY_MCP_OAUTH_INTROSPECTION_CLIENT_SECRET` | No | Client secret for introspection basic auth. |
-| `VERITY_MCP_OAUTH_INTROSPECTION_TOKEN` | No | Bearer token for introspection when basic auth is not used. |
-| `VERITY_MCP_OAUTH_API_KEY_CLAIM` | No | Dot-path claim from introspection response to use as the downstream Verity credential. If omitted, the OAuth access token is forwarded. |
-| `VERITY_MCP_OAUTH_EXPECTED_AUDIENCE` | No | Comma-separated allowed `aud` values when introspection responses include an audience. |
+| `BACKWORK_API_KEY` | Stdio yes; HTTP no | Backwork API key. In HTTP mode, prefer `Authorization: Bearer` per request. |
+| `BACKWORK_API_BASE` | No | Override the API base URL. |
+| `BACKWORK_MCP_TRANSPORT` | No | `stdio` or `http`. |
+| `BACKWORK_MCP_HOST` | No | HTTP bind host. Defaults to `127.0.0.1`. |
+| `BACKWORK_MCP_PORT` | No | HTTP bind port. |
+| `BACKWORK_MCP_PATH` | No | HTTP MCP path. |
+| `BACKWORK_MCP_ALLOWED_ORIGINS` | No | Comma-separated allowed HTTP origins. Loopback origins are allowed for loopback requests. |
+| `BACKWORK_MCP_ALLOW_ORIGIN` | No | Backward-compatible alias for `BACKWORK_MCP_ALLOWED_ORIGINS`. |
+| `BACKWORK_MCP_ALLOWED_HOSTS` | No | Comma-separated allowed HTTP Host headers for public deployments. |
+| `BACKWORK_MCP_ALLOW_HOST` | No | Backward-compatible alias for `BACKWORK_MCP_ALLOWED_HOSTS`. |
+| `BACKWORK_MCP_PUBLIC_HOST` | No | Primary public host allowed for HTTP requests. |
+| `BACKWORK_MCP_PUBLIC_URL` | No | Canonical public origin for OAuth metadata, e.g. `https://backworkhealth.com`. |
+| `BACKWORK_MCP_ALLOW_ENV_KEY` | No | Allow private HTTP requests without bearer auth to use `BACKWORK_API_KEY`. |
+| `BACKWORK_MCP_AUTH_MODE` | No | HTTP bearer mode: `api-key`, `oauth`, or `dual`. Defaults to `dual` when OAuth authorization servers are configured, otherwise `api-key`. |
+| `BACKWORK_MCP_OAUTH_AUTHORIZATION_SERVERS` | OAuth | Comma-separated OAuth issuer / authorization server URLs advertised in protected-resource metadata. |
+| `BACKWORK_MCP_OAUTH_RESOURCE` | No | Override the RFC 8707 resource identifier. Defaults to the public MCP URL. |
+| `BACKWORK_MCP_OAUTH_SCOPES` | No | Space- or comma-separated scopes advertised to clients. Defaults to `backwork:mcp`. |
+| `BACKWORK_MCP_OAUTH_REQUIRED_SCOPES` | No | Space- or comma-separated scopes required after token introspection. |
+| `BACKWORK_MCP_OAUTH_INTROSPECTION_URL` | No | RFC 7662 token introspection endpoint used to validate OAuth access tokens. |
+| `BACKWORK_MCP_OAUTH_INTROSPECTION_CLIENT_ID` | No | Client ID for introspection basic auth. |
+| `BACKWORK_MCP_OAUTH_INTROSPECTION_CLIENT_SECRET` | No | Client secret for introspection basic auth. |
+| `BACKWORK_MCP_OAUTH_INTROSPECTION_TOKEN` | No | Bearer token for introspection when basic auth is not used. |
+| `BACKWORK_MCP_OAUTH_API_KEY_CLAIM` | No | Dot-path claim from introspection response to use as the downstream Backwork credential. If omitted, the OAuth access token is forwarded. |
+| `BACKWORK_MCP_OAUTH_EXPECTED_AUDIENCE` | No | Comma-separated allowed `aud` values when introspection responses include an audience. |
 
 ## Troubleshooting
 
 ### Missing API Key
 
-For stdio, set `VERITY_API_KEY` in the MCP client configuration. For HTTP API-key mode, send `Authorization: Bearer <key>`. For HTTP OAuth mode, configure `VERITY_MCP_OAUTH_AUTHORIZATION_SERVERS` and send `Authorization: Bearer <access_token>`.
+For stdio, set `BACKWORK_API_KEY` in the MCP client configuration. For HTTP API-key mode, send `Authorization: Bearer <key>`. For HTTP OAuth mode, configure `BACKWORK_MCP_OAUTH_AUTHORIZATION_SERVERS` and send `Authorization: Bearer <access_token>`.
 
 ### 401 From HTTP MCP
 
@@ -327,23 +315,23 @@ The remote server did not receive a bearer token. Configure your MCP client to a
 
 ### Claude Code OAuth
 
-If Claude Code does not open the browser, run `/mcp`, select `verity`, and choose the authenticate action. If it gives you a URL instead of opening a browser, copy that URL into your browser.
+If Claude Code does not open the browser, run `/mcp`, select `backwork`, and choose the authenticate action. If it gives you a URL instead of opening a browser, copy that URL into your browser.
 
 If the browser redirect back to Claude Code fails after consent, copy the full callback URL from the browser address bar and paste it into the Claude Code prompt.
 
-If Claude Code keeps using an old token, open `/mcp`, select `verity`, clear authentication, then authenticate again. You can also remove and re-add the server with:
+If Claude Code keeps using an old token, open `/mcp`, select `backwork`, clear authentication, then authenticate again. You can also remove and re-add the server with:
 
 ```bash
-claude mcp remove verity
-claude mcp add --transport http --scope user verity https://mcp.verity.backworkai.com/mcp
+claude mcp remove backwork
+claude mcp add --transport http --scope user backwork https://backworkhealth.com/mcp
 ```
 
-If discovery returns `503`, the Verity web app is intentionally refusing to advertise OAuth because production signing or Redis/KV state storage is missing.
+If discovery returns `503`, the Backwork web app is intentionally refusing to advertise OAuth because production signing or Redis/KV state storage is missing.
 
-If tool calls authenticate but fail with `invalid_token` or `invalid_target`, check that `VERITY_MCP_RESOURCE`, `VERITY_MCP_OAUTH_RESOURCE`, and `VERITY_MCP_OAUTH_EXPECTED_AUDIENCE` all use:
+If tool calls authenticate but fail with `invalid_token` or `invalid_target`, check that `BACKWORK_MCP_RESOURCE`, `BACKWORK_MCP_OAUTH_RESOURCE`, and `BACKWORK_MCP_OAUTH_EXPECTED_AUDIENCE` all use:
 
 ```text
-https://mcp.verity.backworkai.com/mcp
+https://backworkhealth.com/mcp
 ```
 
 ### Rate Limits
@@ -352,9 +340,9 @@ Wait for the reset window or use a higher-capacity API plan.
 
 ## Support
 
-- Documentation: https://verity.backworkai.com/docs
-- Issues: https://github.com/backworkai/verity_mcp/issues
-- Email: support@verity.backworkai.com
+- Documentation: https://backworkhealth.com/docs
+- Issues: https://github.com/tylergibbs1/backwork-mcp/issues
+- Email: support@backworkhealth.com
 
 ## License
 

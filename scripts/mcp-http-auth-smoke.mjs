@@ -17,11 +17,11 @@ await new Promise((resolve) => introspectionServer.listen(0, "127.0.0.1", resolv
 const introspectionAddress = introspectionServer.address();
 assert.ok(introspectionAddress && typeof introspectionAddress === "object");
 
-process.env.VERITY_MCP_AUTH_MODE = "oauth";
-process.env.VERITY_MCP_OAUTH_AUTHORIZATION_SERVERS = "https://auth.verity.example";
-process.env.VERITY_MCP_OAUTH_INTROSPECTION_URL = `http://127.0.0.1:${introspectionAddress.port}/introspect`;
-process.env.VERITY_MCP_OAUTH_SCOPES = "verity:mcp";
-process.env.VERITY_MCP_PUBLIC_URL = "https://mcp.verity.example";
+process.env.BACKWORK_MCP_AUTH_MODE = "oauth";
+process.env.BACKWORK_MCP_OAUTH_AUTHORIZATION_SERVERS = "https://auth.backwork.example";
+process.env.BACKWORK_MCP_OAUTH_INTROSPECTION_URL = `http://127.0.0.1:${introspectionAddress.port}/introspect`;
+process.env.BACKWORK_MCP_OAUTH_SCOPES = "backwork:mcp";
+process.env.BACKWORK_MCP_PUBLIC_URL = "https://mcp.backwork.example";
 
 const { handleHttpRequest } = await import("../build/src/index.js");
 
@@ -38,9 +38,9 @@ try {
   });
   assert.equal(metadataResponse.status, 200);
   const metadata = await metadataResponse.json();
-  assert.equal(metadata.resource, "https://mcp.verity.example/mcp");
-  assert.deepEqual(metadata.authorization_servers, ["https://auth.verity.example"]);
-  assert.deepEqual(metadata.scopes_supported, ["verity:mcp"]);
+  assert.equal(metadata.resource, "https://mcp.backwork.example/mcp");
+  assert.deepEqual(metadata.authorization_servers, ["https://auth.backwork.example"]);
+  assert.deepEqual(metadata.scopes_supported, ["backwork:mcp"]);
 
   const pathMetadataResponse = await fetch(`${baseUrl}/.well-known/oauth-protected-resource/mcp`, {
     headers: { Host: "127.0.0.1" },
@@ -53,7 +53,7 @@ try {
     body: "{}",
   });
   assert.equal(mcpResponse.status, 401);
-  assert.match(mcpResponse.headers.get("www-authenticate") || "", /resource_metadata="https:\/\/mcp\.verity\.example\/\.well-known\/oauth-protected-resource"/);
+  assert.match(mcpResponse.headers.get("www-authenticate") || "", /resource_metadata="https:\/\/mcp\.backwork\.example\/\.well-known\/oauth-protected-resource"/);
 
   const invalidTokenResponse = await fetch(`${baseUrl}/mcp`, {
     method: "POST",

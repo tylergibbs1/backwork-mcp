@@ -35,3 +35,4 @@ coverage/
 # Package manager locks (optional - remove if you want to commit)
 # package-lock.json
 .vercel
+.env.local
