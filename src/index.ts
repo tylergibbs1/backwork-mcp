@@ -11,6 +11,16 @@ import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
+import {
+  BACKWORK_OPERATIONS,
+  isOperationAvailable,
+  operationPath,
+  type OperationId,
+  type OperationRequest,
+} from "./api-operations.js";
+import { extractProvenance, formatProvenance, provenanceSchema } from "./provenance.js";
+import { TOOL_OPERATIONS } from "./tool-operations.js";
+
 // Configuration
 const BACKWORK_API_BASE = process.env.BACKWORK_API_BASE || "https://backworkhealth.com/api/v1";
 const requestApiKey = new AsyncLocalStorage<string | undefined>();
@@ -38,10 +48,15 @@ const oauthApiKeyClaim = process.env.BACKWORK_MCP_OAUTH_API_KEY_CLAIM;
 const oauthExpectedAudiences = parseDelimitedList(process.env.BACKWORK_MCP_OAUTH_EXPECTED_AUDIENCE);
 const oauthResourceOverride = process.env.BACKWORK_MCP_OAUTH_RESOURCE;
 const publicUrlOverride = process.env.BACKWORK_MCP_PUBLIC_URL;
+// Kept equal to package.json and server.json; test/registry-manifest.test.mjs checks it.
+export const SERVER_VERSION = "2.0.1";
+const exposeUnavailableTools = process.env.BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS === "true";
 
 type AuthenticatedIncomingMessage = IncomingMessage & { auth?: AuthInfo };
 type BackworkToolInputSchema = z.ZodRawShape;
 type BackworkToolConfig = {
+  /** The API operations each action (or evidence module) calls; drives production availability. */
+  operations: Record<string, readonly OperationId[]>;
   title?: string;
   description?: string;
   inputSchema?: BackworkToolInputSchema;
@@ -67,6 +82,7 @@ const backworkToolOutputSchema = {
   data: z.unknown().optional().describe("Structured data returned by the Backwork API when available."),
   meta: z.unknown().optional().describe("Response metadata such as pagination when available."),
   message: z.string().describe("Human-readable result, status, or empty-result message."),
+  provenance: provenanceSchema.optional(),
 };
 
 const mutatingTools = new Set([
@@ -118,6 +134,15 @@ class BackworkApiError extends Error {
     this.requestId = params.requestId;
     this.upgradeTo = params.upgradeTo;
     this.requiredPlan = params.requiredPlan;
+  }
+}
+
+class OperationUnavailableError extends Error {
+  constructor(readonly operationId: OperationId) {
+    super(
+      `${BACKWORK_OPERATIONS[operationId].method} ${BACKWORK_OPERATIONS[operationId].path} is not available on the production Backwork API yet.`,
+    );
+    this.name = "OperationUnavailableError";
   }
 }
 
@@ -322,20 +347,27 @@ function buildProtectedResourceMetadata(req: IncomingMessage): Record<string, un
   };
 }
 
-// Helper function for making Backwork API requests
-async function backworkRequest<T>(
-  endpoint: string,
-  options: {
-    method?: "GET" | "POST" | "PATCH" | "DELETE";
-    params?: Record<string, string | number | boolean | undefined>;
-    body?: unknown;
-    headers?: Record<string, string>;
-  } = {}
-): Promise<T> {
-  const { method = "GET", params, body, headers: extraHeaders } = options;
+/**
+ * The only way tools reach the Backwork API. The request type comes from the
+ * operation catalog, so a tool can send only fields the catalog declares, and
+ * the catalog is checked against the published OpenAPI document in CI.
+ */
+// The response envelope is typed `any` as before; the catalog's `reads` list,
+// checked against the OpenAPI document, is what pins the fields tools use.
+async function backworkRequest<Id extends OperationId>(
+  operationId: Id,
+  request: OperationRequest<Id> = {} as OperationRequest<Id>,
+): Promise<any> {
+  if (!isOperationAvailable(operationId, BACKWORK_API_BASE, exposeUnavailableTools)) {
+    throw new OperationUnavailableError(operationId);
+  }
+  const operation = BACKWORK_OPERATIONS[operationId];
+  const method = operation.method;
+  const params: Record<string, unknown> | undefined = request.query;
+  const body: unknown = request.body;
+  const extraHeaders: Record<string, string> | undefined = request.headers as Record<string, string> | undefined;
 
-  // Build URL with query params
-  const url = new URL(`${BACKWORK_API_BASE}${endpoint}`);
+  const url = new URL(`${BACKWORK_API_BASE}${operationPath(operationId, request.pathParams)}`);
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== "") {
@@ -390,7 +422,7 @@ async function backworkRequest<T>(
     });
   }
 
-  return data as T;
+  return data;
 }
 
 // Format helpers for clean output
@@ -462,6 +494,16 @@ function dispositionCounts(policies: any[]): string {
 }
 
 function formatToolError(action: string, error: unknown): string {
+  if (error instanceof OperationUnavailableError) {
+    return `Cannot ${action}: ${error.message} This request was not sent. Use an action this tool lists as available.`;
+  }
+  if (error instanceof BackworkApiError && error.code === "COMMERCIAL_SURFACE_UNAVAILABLE") {
+    return [
+      `Cannot ${action}: the Backwork API reports this endpoint is not available in production yet.`,
+      "Do not retry. Use an available action or tell the user this data is not available.",
+      error.requestId ? `Request ID: ${error.requestId}` : null,
+    ].filter(Boolean).join("\n");
+  }
   if (error instanceof BackworkApiError) {
     const details = error.details && typeof error.details === "object" ? (error.details as Record<string, unknown>) : {};
     const requiredScopes = asArray(details.required_scopes).map(String);
@@ -768,12 +810,15 @@ function errorResult(message: string): CallToolResult {
 }
 
 function toolResult(message: string, data?: unknown, meta?: unknown): CallToolResult {
+  const provenance = extractProvenance(data);
+  const text = provenance ? `${message}\n\n${formatProvenance(provenance)}` : message;
   return {
-    content: [{ type: "text", text: message }],
+    content: [{ type: "text", text }],
     structuredContent: {
       ...(data !== undefined ? { data } : {}),
       ...(meta !== undefined ? { meta } : {}),
       message,
+      ...(provenance ? { provenance } : {}),
     },
   };
 }
@@ -789,12 +834,24 @@ function enhanceDescription(name: string, description: string | undefined): stri
   return `${baseDescription}\n\n${responseFormatNote}`;
 }
 
+/** Actions whose operations the production API does not serve. */
+export function unavailableActions(operations: Record<string, readonly OperationId[]>): string[] {
+  return Object.entries(operations)
+    .filter(([, ids]) => ids.some((id) => !isOperationAvailable(id, BACKWORK_API_BASE, exposeUnavailableTools)))
+    .map(([action]) => action);
+}
+
+function availabilityNote(unavailable: string[]): string {
+  if (unavailable.length === 0) return "";
+  return `\n\nNot available on the production Backwork API yet: ${unavailable.map((action) => `'${action}'`).join(", ")}. Requests for these return an error without calling the API; do not retry them.`;
+}
+
 function enhanceToolConfig(name: string, config: BackworkToolConfig): BackworkToolConfig {
   const title = config.title || toolTitles[name] || titleizeToolName(name);
   return {
     ...config,
     title,
-    description: enhanceDescription(name, config.description),
+    description: enhanceDescription(name, config.description) + availabilityNote(unavailableActions(config.operations)),
     inputSchema: withResponseFormatInput(config.inputSchema),
     outputSchema: config.outputSchema || backworkToolOutputSchema,
     annotations: config.annotations || toolAnnotations(name),
@@ -817,9 +874,13 @@ function wrapToolHandler(name: string, handler: BackworkToolHandler): BackworkTo
 
 function createBackworkToolRegistrar(server: McpServer): RegisterBackworkTool {
   return (name, config, handler) => {
+    // A tool none of whose actions can succeed is hidden rather than offered to
+    // an agent that would only collect errors from it.
+    if (unavailableActions(config.operations).length === Object.keys(config.operations).length) return;
+
     const prefixedName = `backwork_${name}`;
     const wrappedHandler = wrapToolHandler(name, handler);
-    const primaryConfig = enhanceToolConfig(name, config);
+    const { operations: _operations, ...primaryConfig } = enhanceToolConfig(name, config);
 
     server.registerTool(prefixedName, primaryConfig, wrappedHandler);
   };
@@ -1122,6 +1183,7 @@ function registerWorkflowTools(registerTool: RegisterBackworkTool): void {
   registerTool(
     "coverage_lookup",
     {
+      operations: TOOL_OPERATIONS.coverage_lookup,
       description: `Answer common coverage questions for procedure codes in one workflow.
 Use this when a user asks whether codes are covered, whether prior authorization is required, what policies support the answer, or how coverage differs by jurisdiction.
 This tool can combine code lookup, related policy evidence, Medicare prior-auth checks, claim-risk validation, jurisdiction comparison, and spending evidence so the agent does not need to chain endpoint-shaped tools.`,
@@ -1164,37 +1226,32 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
         const normalizedCodeInclude = normalizeInclude(code_include, "rvu,policies");
 
         if (requested.has("code_details")) {
-          const endpoint = procedure_codes.length === 1 ? "/codes/lookup" : "/codes/batch";
-          const result = await backworkRequest<any>(
-            endpoint,
+          const result =
             procedure_codes.length === 1
-              ? {
-                  params: {
+              ? await backworkRequest("lookupCode", {
+                  query: {
                     code: procedure_codes[0],
                     code_system,
                     jurisdiction,
                     include: normalizedCodeInclude,
                     fuzzy: "true",
                   },
-                }
-              : {
-                  method: "POST",
+                })
+              : await backworkRequest("batchLookupCodes", {
                   body: {
                     codes: procedure_codes,
                     code_system,
                     include: normalizedCodeInclude,
                   },
-                },
-          );
+                });
           data.code_details = result.data;
           lines.push("\n--- Code Details ---");
           lines.push(procedure_codes.length === 1 ? formatCode(result.data) : formatBatchLookup(result.data));
         }
 
         if (requested.has("prior_auth")) {
-          const result = await backworkRequest<any>("/prior-auth/check", {
-            method: "POST",
-            body: { procedure_codes, diagnosis_codes, payer, state },
+          const result = await backworkRequest("checkPriorAuth", {
+            body: { procedure_codes, state },
           });
           data.prior_auth = result.data;
           lines.push("\n--- Prior Authorization ---");
@@ -1202,8 +1259,7 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
         }
 
         if (requested.has("claim_risk")) {
-          const result = await backworkRequest<any>("/claims/validate", {
-            method: "POST",
+          const result = await backworkRequest("validateClaims", {
             body: {
               procedure_codes,
               diagnosis_codes,
@@ -1220,8 +1276,7 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
         }
 
         if (requested.has("jurisdiction_compare") || compare_jurisdictions?.length) {
-          const result = await backworkRequest<any>("/policies/compare", {
-            method: "POST",
+          const result = await backworkRequest("comparePolicies", {
             body: { procedure_codes, jurisdictions: compare_jurisdictions },
           });
           data.jurisdiction_compare = result.data;
@@ -1239,8 +1294,8 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
         }
 
         if (requested.has("spending")) {
-          const result = await backworkRequest<any>("/spending/by-code", {
-            params: procedure_codes.length === 1 ? { code: procedure_codes[0] } : { codes: procedure_codes.join(",") },
+          const result = await backworkRequest("getSpendingByCode", {
+            query: procedure_codes.length === 1 ? { code: procedure_codes[0] } : { codes: procedure_codes.join(",") },
           });
           data.spending = result.data;
           lines.push("\n--- Spending ---");
@@ -1257,6 +1312,7 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
   registerTool(
     "policy_research",
     {
+      operations: TOOL_OPERATIONS.policy_research,
       description: `Research coverage policies and criteria.
 Use this for policy search, fetching one policy by ID, searching extracted criteria, reviewing policy changes, or mapping state to MAC jurisdiction. This replaces several endpoint-shaped policy tools with one research workflow.`,
       inputSchema: {
@@ -1279,8 +1335,8 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     async ({ action, query, policy_id, policy_type, jurisdiction, payer, status, mode, section, since, change_type, include, limit, cursor }) => {
       try {
         if (action === "search") {
-          const result = await backworkRequest<any>("/policies", {
-            params: { q: query, mode, policy_type, jurisdiction, payer, status, limit, cursor, include: normalizeInclude(include) },
+          const result = await backworkRequest("listPolicies", {
+            query: { q: query, mode, policy_type, jurisdiction, payer, status, limit, cursor, include: normalizeInclude(include) },
           });
           if (!result.data?.length) return toolResult(`No policies found for "${query || "your search"}".`, result.data, result.meta);
           const lines = [`Found ${result.data.length} policies${result.meta?.pagination?.has_more ? " (more available)" : ""}:\n`];
@@ -1291,16 +1347,17 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
 
         if (action === "get") {
           if (!policy_id) return toolError("policy_id is required when action='get'.");
-          const result = await backworkRequest<any>(`/policies/${encodeURIComponent(policy_id)}`, {
-            params: { include: normalizeInclude(include, "criteria,codes") },
+          const result = await backworkRequest("getPolicy", {
+            pathParams: { id: policy_id },
+            query: { include: normalizeInclude(include, "criteria,codes") },
           });
           return toolResult(formatPolicy(result.data, true), result.data, result.meta);
         }
 
         if (action === "criteria") {
           if (!query) return toolError("query is required when action='criteria'.");
-          const result = await backworkRequest<any>("/coverage/criteria", {
-            params: { q: query, section, policy_type, jurisdiction, limit, cursor },
+          const result = await backworkRequest("searchCriteria", {
+            query: { q: query, section, policy_type, jurisdiction, limit, cursor },
           });
           if (!result.data?.length) return toolResult(`No criteria found for "${query}".`, result.data, result.meta);
           const lines = [`Found ${result.data.length} matching criteria:\n`];
@@ -1315,8 +1372,8 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
         }
 
         if (action === "changes") {
-          const result = await backworkRequest<any>("/policies/changes", {
-            params: { since, policy_id, change_type, limit, cursor },
+          const result = await backworkRequest("getPolicyChanges", {
+            query: { since, policy_id, change_type, limit, cursor },
           });
           if (!result.data?.length) return toolResult("No policy changes found for the specified criteria.", result.data, result.meta);
           const lines = [`Found ${result.data.length} policy changes:\n`];
@@ -1329,7 +1386,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
           return toolResult(lines.join("\n"), result.data, result.meta);
         }
 
-        const result = await backworkRequest<any>("/jurisdictions");
+        const result = await backworkRequest("listJurisdictions");
         const lines = [`MAC Jurisdictions (${result.data.length} total):\n`];
         result.data.forEach((jur: any) => {
           lines.push(`[${jur.jurisdiction_code}] ${jur.jurisdiction_name || ""}`);
@@ -1348,6 +1405,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
   registerTool(
     "claim_validation",
     {
+      operations: TOOL_OPERATIONS.claim_validation,
       description: "Validate claim coverage, documentation requirements, denial risk, and optional policy-specific criteria in one workflow.",
       inputSchema: {
         procedure_codes: z.array(z.string()).min(1).max(10).describe("CPT/HCPCS procedure codes"),
@@ -1371,8 +1429,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
       try {
         const data: Record<string, unknown> = {};
         const lines = ["Claim Validation"];
-        const result = await backworkRequest<any>("/claims/validate", {
-          method: "POST",
+        const result = await backworkRequest("validateClaims", {
           body,
           headers: idempotency_key ? { "X-Idempotency-Key": idempotency_key } : undefined,
         });
@@ -1380,8 +1437,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
         lines.push(formatClaimValidation(result.data));
 
         if (policy_id && coverage_parameters) {
-          const evaluation = await backworkRequest<any>("/coverage/evaluate", {
-            method: "POST",
+          const evaluation = await backworkRequest("evaluateCoverage", {
             body: { policy_id, parameters: coverage_parameters },
           });
           data.coverage_evaluation = evaluation.data;
@@ -1399,6 +1455,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
   registerTool(
     "prior_auth_research",
     {
+      operations: TOOL_OPERATIONS.prior_auth_research,
       description: "Check, start, or poll payer prior-authorization research without exposing separate task-management tools.",
       inputSchema: {
         action: z.enum(["check", "start_research", "get_research"]).describe("Use check for immediate Medicare PA evidence, start_research for payer website research, get_research to poll a research_id"),
@@ -1407,7 +1464,6 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
         payer: z.string().optional(),
         state: z.string().length(2).optional(),
         diagnosis_codes: z.array(z.string()).max(20).optional(),
-        clinical_context: z.string().max(2000).optional(),
         sync: z.boolean().default(false),
       },
     },
@@ -1415,22 +1471,20 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
       try {
         if (action === "get_research") {
           if (!research_id) return toolError("research_id is required when action='get_research'.");
-          const result = await backworkRequest<any>(`/prior-auth/research/${encodeURIComponent(research_id)}`);
+          const result = await backworkRequest("getPriorAuthResearch", { pathParams: { id: research_id } });
           return toolResult(formatResearch(result.data), result.data, result.meta);
         }
 
         if (!procedure_codes?.length) return toolError("procedure_codes is required for prior authorization checks and research.");
 
         if (action === "check") {
-          const result = await backworkRequest<any>("/prior-auth/check", {
-            method: "POST",
-            body: { procedure_codes, diagnosis_codes: body.diagnosis_codes, payer: body.payer, state: body.state },
+          const result = await backworkRequest("checkPriorAuth", {
+            body: { procedure_codes, state: body.state },
           });
           return toolResult(formatPriorAuth(result.data), result.data, result.meta);
         }
 
-        const result = await backworkRequest<any>("/prior-auth/research", {
-          method: "POST",
+        const result = await backworkRequest("researchPriorAuth", {
           body: { ...body, procedure_codes },
         });
         return toolResult(formatResearch(result.data), result.data, result.meta);
@@ -1443,6 +1497,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
   registerTool(
     "drug_formulary_research",
     {
+      operations: TOOL_OPERATIONS.drug_formulary_research,
       description: "Search commercial pharmacy-benefit evidence from CVS Caremark, Express Scripts, and UnitedHealthcare / Optum Rx.",
       inputSchema: {
         query: z.string().min(2).max(200).describe("Drug, class, or formulary requirement to search for"),
@@ -1452,11 +1507,13 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     },
     async ({ query, payer, limit }) => {
       try {
-        let result = await backworkRequest<any>("/drugs/formulary", { params: { q: query, payer, limit } });
+        let result = await backworkRequest("searchDrugFormularyEvidence", { query: { q: query, payer, limit } });
         const fallbackQuery = formularyResults(result.data).length === 0 ? simplifyDrugQuery(query) : undefined;
 
         if (fallbackQuery) {
-          const fallbackResult = await backworkRequest<any>("/drugs/formulary", { params: { q: fallbackQuery, payer, limit } });
+          const fallbackResult = await backworkRequest("searchDrugFormularyEvidence", {
+            query: { q: fallbackQuery, payer, limit },
+          });
           if (formularyResults(fallbackResult.data).length > 0) {
             result = {
               ...fallbackResult,
@@ -1486,6 +1543,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
   registerTool(
     "compliance_review",
     {
+      operations: TOOL_OPERATIONS.compliance_review,
       description: "Review compliance dashboard state, list unreviewed policy changes, or acknowledge changes when explicitly requested.",
       inputSchema: {
         action: z.enum(["stats", "list_unreviewed", "acknowledge", "bulk_acknowledge"]),
@@ -1500,20 +1558,20 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     async ({ action, change_type, cursor, limit, diff_id, diff_ids, notes }) => {
       try {
         if (action === "stats") {
-          const result = await backworkRequest<any>("/compliance/stats");
+          const result = await backworkRequest("getComplianceStats");
           return toolResult(formatComplianceStats(result.data), result.data, result.meta);
         }
         if (action === "list_unreviewed") {
-          const result = await backworkRequest<any>("/compliance/unreviewed", { params: { change_type, cursor, limit } });
+          const result = await backworkRequest("listUnreviewedChanges", { query: { change_type, cursor, limit } });
           return toolResult(formatComplianceChanges(result.data, result.meta), result.data, result.meta);
         }
         if (action === "acknowledge") {
           if (diff_id === undefined) return toolError("diff_id is required when action='acknowledge'.");
-          const result = await backworkRequest<any>("/compliance/ack", { method: "POST", body: { diff_id, notes } });
+          const result = await backworkRequest("acknowledgeChange", { body: { diff_id, notes } });
           return toolResult(formatMutationResult("Acknowledge policy change", result.data), result.data, result.meta);
         }
         if (!diff_ids?.length) return toolError("diff_ids is required when action='bulk_acknowledge'.");
-        const result = await backworkRequest<any>("/compliance/ack/bulk", { method: "POST", body: { diff_ids, notes } });
+        const result = await backworkRequest("bulkAcknowledgeChanges", { body: { diff_ids, notes } });
         return toolResult(formatMutationResult("Bulk acknowledge policy changes", result.data), result.data, result.meta);
       } catch (error) {
         return errorResult(formatToolError("review compliance", error));
@@ -1524,6 +1582,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
   registerTool(
     "webhook_management",
     {
+      operations: TOOL_OPERATIONS.webhook_management,
       description: "List, create, update, delete, or test webhook endpoints. Use only when the user is explicitly managing webhook configuration.",
       inputSchema: {
         action: z.enum(["list", "create", "update", "delete", "test"]),
@@ -1536,24 +1595,24 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     async ({ action, id, url, events, status }) => {
       try {
         if (action === "list") {
-          const result = await backworkRequest<any>("/webhooks");
+          const result = await backworkRequest("listWebhooks");
           return toolResult(formatWebhookList(result.data), result.data, result.meta);
         }
         if (action === "create") {
           if (!url || !events?.length) return toolError("url and at least one event are required when action='create'.");
-          const result = await backworkRequest<any>("/webhooks", { method: "POST", body: { url, events } });
+          const result = await backworkRequest("createWebhook", { body: { url, events } });
           return toolResult(formatMutationResult("Create webhook", result.data), result.data, result.meta);
         }
         if (id === undefined) return toolError("id is required when action is update, delete, or test.");
         if (action === "update") {
-          const result = await backworkRequest<any>(`/webhooks/${id}`, { method: "PATCH", body: { url, events, status } });
+          const result = await backworkRequest("updateWebhook", { pathParams: { id }, body: { url, events, status } });
           return toolResult(formatMutationResult("Update webhook", result.data), result.data, result.meta);
         }
         if (action === "delete") {
-          const result = await backworkRequest<any>(`/webhooks/${id}`, { method: "DELETE" });
+          const result = await backworkRequest("deleteWebhook", { pathParams: { id } });
           return toolResult(formatMutationResult("Delete webhook", result.data), result.data, result.meta);
         }
-        const result = await backworkRequest<any>(`/webhooks/${id}/test`, { method: "POST" });
+        const result = await backworkRequest("testWebhook", { pathParams: { id } });
         return toolResult(formatMutationResult("Test webhook", result.data), result.data, result.meta);
       } catch (error) {
         return errorResult(formatToolError("manage webhooks", error));
@@ -1564,12 +1623,13 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
   registerTool(
     "system_health",
     {
+      operations: TOOL_OPERATIONS.system_health,
       description: "Check Backwork API health and dependency status. Use for diagnostics, not for coverage research.",
       inputSchema: {},
     },
     async () => {
       try {
-        const result = await backworkRequest<any>("/health");
+        const result = await backworkRequest("getHealth");
         return toolResult(formatJson(result.data), result.data, result.meta);
       } catch (error) {
         return errorResult(formatToolError("check health", error));
@@ -1581,7 +1641,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
 function createBackworkMcpServer(): McpServer {
   const server = new McpServer({
     name: "backwork",
-    version: "2.0.0",
+    version: SERVER_VERSION,
   });
   const registerTool = createBackworkToolRegistrar(server);
 

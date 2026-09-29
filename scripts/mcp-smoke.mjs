@@ -19,6 +19,8 @@ const transport = new StdioClientTransport({
   env: {
     ...process.env,
     BACKWORK_API_KEY: "bwk_test_dummy",
+    // Production hides tools whose endpoints are unavailable; test/tools.test.mjs covers that.
+    BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS: "true",
   },
 });
 

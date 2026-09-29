@@ -1,0 +1,44 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.tylergibbs1/backwork-mcp",
+  "title": "Backwork",
+  "description": "Medicare coverage policies, prior authorization, claim risk, and medical codes from Backwork.",
+  "websiteUrl": "https://backworkhealth.com",
+  "repository": {
+    "url": "https://github.com/tylergibbs1/backwork-mcp",
+    "source": "github"
+  },
+  "version": "2.0.1",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://backworkhealth.com/mcp"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@backwork/mcp",
+      "version": "2.0.1",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "BACKWORK_API_KEY",
+          "description": "Backwork API key (bwk_live_...). The hosted remote uses OAuth instead and needs no key.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "BACKWORK_API_BASE",
+          "description": "Override the Backwork API base URL. Defaults to https://backworkhealth.com/api/v1.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

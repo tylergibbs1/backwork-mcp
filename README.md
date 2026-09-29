@@ -210,6 +210,29 @@ Tool names use the `backwork_` prefix for discoverability when this server is in
 
 All tools include `title`, `description`, `inputSchema`, `outputSchema`, and MCP annotations. Successful calls return readable text plus `structuredContent` with `message`, and when available, raw Backwork API `data` and `meta`. Tool-level failures return `isError: true`. For tools that combine read and write actions, annotations are conservative at the tool level.
 
+### Sources and currency
+
+When the Backwork API response cites policy documents, `structuredContent.provenance` carries what an agent needs to cite them, and the text output ends with a short `--- Sources ---` block:
+
+| Field | Meaning |
+| --- | --- |
+| `source_urls` | Distinct source document URLs |
+| `authorities` | Issuing authorities, for example `CMS` or a payer name |
+| `retrieved_at` | Oldest time Backwork fetched any cited source |
+| `as_of` | Latest effective date among the cited sources |
+| `sources[]` | `policy_id`, `source_url`, `authority`, `retrieved_at`, `as_of` per source |
+
+Values are copied from the API response (`source_url`, `effective_date`, `last_verified_at`, the policy type, and the payer). A value the API did not return is `null`. The shape matches the `provenance` block on Backwork agent tool results, which is passed through unchanged.
+
+### Production availability
+
+The Backwork OpenAPI document marks some operations `x-backwork-availability: unavailable-in-production`. Against the production API (`https://backworkhealth.com`), this server:
+
+- hides a tool when none of its actions can succeed (currently `coverage_lookup`, `claim_validation`, `prior_auth_research`, and `drug_formulary_research`);
+- names the unavailable actions in the description of a partly available tool (`policy_research`, `compliance_review`), and answers them with an error without calling the API.
+
+A server pointed at another Backwork deployment with `BACKWORK_API_BASE` offers every tool. Set `BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS=true` to offer every tool against production anyway.
+
 | Primary tool | Purpose |
 | --- | --- |
 | `backwork_coverage_lookup` | Look up procedure codes and combine code details, policy evidence, prior authorization, claim risk, jurisdiction comparison, and spending evidence |
@@ -259,9 +282,24 @@ Run the build and MCP metadata smoke test:
 npm test
 ```
 
-The smoke test starts the built stdio server with a dummy key, verifies the 8 workflow tools, checks titles, schemas, annotations, output schemas, `response_format`, and verifies local validation failures are reported with `isError: true`.
+The smoke test starts the built stdio server with a dummy key, verifies the 8 workflow tools, checks titles, schemas, annotations, output schemas, `response_format`, and verifies local validation failures are reported with `isError: true`. The `test/` suite covers production availability, provenance, description quality and a lexical tool-selection check (no model calls), and the registry manifest.
+
+### API contract
+
+Every Backwork endpoint this server calls is listed in `src/api-operations.ts`, with the request fields it sends and the response fields it reads. Tools can only call the API through that catalog. `npm test` checks the catalog against the vendored `openapi/backwork-openapi.json`, and CI runs `npm run contract:live` against `https://backworkhealth.com/openapi.json`. A field the API no longer accepts or returns, or an operation newly marked unavailable, fails CI.
+
+When the Backwork API changes, refresh the vendored copy and review the diff:
+
+```bash
+npm run openapi:update
+npm run contract:check
+```
 
 The `evals/` directory includes a tool-discoverability evaluation and a read-only data evaluation built from fixed source-backed policy/code records. Refresh the read-only answers intentionally when Backwork source data is updated.
+
+## MCP Registry
+
+`server.json` describes this server for the [official MCP registry](https://registry.modelcontextprotocol.io): the hosted Streamable HTTP remote at `https://backworkhealth.com/mcp` (OAuth, discovered from the protected-resource metadata) and the `@backwork/mcp` npm package over stdio. `package.json` carries the matching `mcpName` that the registry uses to verify npm ownership, so the npm release must include it before the manifest is published. Keep `version` in `server.json`, `package.json`, and `SERVER_VERSION` in `src/index.ts` equal; `npm test` checks this.
 
 ## Release
 
@@ -302,6 +340,7 @@ The npm package is available under the Backwork scope as `@backwork/mcp`.
 | `BACKWORK_MCP_OAUTH_INTROSPECTION_TOKEN` | No | Bearer token for introspection when basic auth is not used. |
 | `BACKWORK_MCP_OAUTH_API_KEY_CLAIM` | No | Dot-path claim from introspection response to use as the downstream Backwork credential. If omitted, the OAuth access token is forwarded. |
 | `BACKWORK_MCP_OAUTH_EXPECTED_AUDIENCE` | No | Comma-separated allowed `aud` values when introspection responses include an audience. |
+| `BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS` | No | `true` offers tools and actions the production API marks unavailable. |
 
 ## Troubleshooting
 
@@ -318,6 +357,8 @@ The remote server did not receive a bearer token. Configure your MCP client to a
 If Claude Code does not open the browser, run `/mcp`, select `backwork`, and choose the authenticate action. If it gives you a URL instead of opening a browser, copy that URL into your browser.
 
 If the browser redirect back to Claude Code fails after consent, copy the full callback URL from the browser address bar and paste it into the Claude Code prompt.
+
+This server does not hold OAuth tokens. It validates each request's access token by introspection and forwards it (or the mapped API key) to the Backwork API. Refreshing an expired access token is the MCP client's job: when introspection reports a token inactive, the server answers `401` with `error="invalid_token"`, and the client can use its refresh token with the Backwork authorization server.
 
 If Claude Code keeps using an old token, open `/mcp`, select `backwork`, clear authentication, then authenticate again. You can also remove and re-add the server with:
 
