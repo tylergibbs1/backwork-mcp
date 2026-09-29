@@ -2,6 +2,7 @@
   "name": "@backwork/mcp",
   "version": "2.0.1",
   "description": "MCP server for the Backwork healthcare API - Medicare coverage policies, prior auth, and medical codes",
+  "mcpName": "io.github.tylergibbs1/backwork-mcp",
   "type": "module",
   "bin": {
     "backwork-mcp": "build/src/index.js"
@@ -10,11 +11,14 @@
     "clean": "node -e \"require('node:fs').rmSync('build', { recursive: true, force: true })\"",
     "build": "npm run clean && tsc",
     "guard:release-tag": "node -e \"const pkg=require('./package.json'); const expected='v'+pkg.version; const actual=process.env.GITHUB_REF_NAME; if (actual !== expected) { throw new Error('Release ref '+(actual || '<unset>')+' does not match package version '+expected); }\"",
-    "test": "npm run build && node scripts/mcp-smoke.mjs && node scripts/mcp-http-auth-smoke.mjs",
+    "test": "npm run build && node scripts/mcp-smoke.mjs && node scripts/mcp-http-auth-smoke.mjs && node --test test/*.test.mjs && node scripts/check-openapi-contract.mjs",
     "start": "node build/src/index.js",
     "start:http": "node build/src/index.js --http",
     "dev": "tsc --watch",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "contract:check": "npm run build && node scripts/check-openapi-contract.mjs",
+    "contract:live": "npm run build && node scripts/check-openapi-contract.mjs --live",
+    "openapi:update": "node scripts/update-openapi.mjs"
   },
   "files": [
     "build"
@@ -28,6 +32,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "typescript": "^5.7.0"
   },
   "engines": {
