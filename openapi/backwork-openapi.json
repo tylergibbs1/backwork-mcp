@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Backwork Coverage Policy API",
-    "description": "The Backwork API provides programmatic access to Medicare and commercial payer coverage policies,\nmedical code lookups, prior authorization requirements, and policy change tracking.\n\n## Authentication\nAll endpoints (except /health) require an API key passed in the Authorization header:\n```\nAuthorization: Bearer bwk_live_xxxxx\n```\n\n## Rate Limiting\n- Free tier: 100 requests/minute, 1,000 requests/day\n- Pay-as-you-go: 1,000 requests/minute, unlimited daily\n- Enterprise: Custom limits\n\nRate limit headers are included in all responses:\n- `X-RateLimit-Limit`: Maximum requests per window\n- `X-RateLimit-Remaining`: Requests remaining in current window\n- `X-RateLimit-Reset`: Unix timestamp when window resets\n\n## Response Format\nAll responses follow a consistent structure:\n```json\n{\n  \"success\": true,\n  \"data\": { ... },\n  \"meta\": {\n    \"request_id\": \"req_xxxxx\",\n    \"timestamp\": \"2024-01-15T10:30:00Z\"\n  }\n}\n```\n\n## Error Handling\nErrors include machine-readable codes for programmatic handling:\n```json\n{\n  \"success\": false,\n  \"error\": {\n    \"code\": \"RESOURCE_POLICY_NOT_FOUND\",\n    \"message\": \"Policy not found\",\n    \"docUrl\": \"https://backworkhealth.com/docs/errors#resource-policy-not-found\",\n    \"retryable\": false\n  },\n  \"meta\": { \"request_id\": \"req_xxxxx\", \"timestamp\": \"...\" }\n}\n```\nRetry only when `retryable` is true.\n\n## Production Availability\nOperations marked `x-backwork-availability: unavailable-in-production` are not live yet. Production\nrequests to them return 404 with `COMMERCIAL_SURFACE_UNAVAILABLE`.",
+    "description": "The Backwork API provides programmatic access to Medicare and commercial payer coverage policies,\nmedical code lookups, prior authorization requirements, and policy change tracking.\n\n## Authentication\nAll endpoints (except /health) require an API key passed in the Authorization header:\n```\nAuthorization: Bearer bwk_live_xxxxx\n```\n\n## Rate Limiting\n| Plan | Requests per minute |\n| --- | --- |\n| Free | 10 |\n| Developer | 100 |\n| Practice | 150 |\n| Professional | 300 |\n| Scale | 600 |\n| Enterprise | 2,000 |\n\nThe limit is a sliding one-minute window per organization: every API key in the organization draws on it. An API key with its own per-minute limit uses that limit instead of the plan's. Some endpoints count as more than one request; the rest count as one. See https://backworkhealth.com/docs/rate-limits for endpoint weights.\n\nRate limit headers are included in all responses:\n- `X-RateLimit-Limit`: Maximum requests per window\n- `X-RateLimit-Remaining`: Requests remaining in current window\n- `X-RateLimit-Reset`: Unix timestamp when window resets\n\n## Response Format\nAll responses follow a consistent structure:\n```json\n{\n  \"success\": true,\n  \"data\": { ... },\n  \"meta\": {\n    \"request_id\": \"req_xxxxx\",\n    \"timestamp\": \"2024-01-15T10:30:00Z\"\n  }\n}\n```\n\n## Error Handling\nErrors include machine-readable codes for programmatic handling:\n```json\n{\n  \"success\": false,\n  \"error\": {\n    \"code\": \"RESOURCE_POLICY_NOT_FOUND\",\n    \"message\": \"Policy not found\",\n    \"docUrl\": \"https://backworkhealth.com/docs/errors#resource-policy-not-found\",\n    \"retryable\": false\n  },\n  \"meta\": { \"request_id\": \"req_xxxxx\", \"timestamp\": \"...\" }\n}\n```\nRetry only when `retryable` is true.\n\n## Production Availability\nOperations marked `x-backwork-availability: unavailable-in-production` are not live yet. Production\nrequests to them return 404 with `COMMERCIAL_SURFACE_UNAVAILABLE`.\n\n## Sandbox\nA synthetic-data sandbox at `https://backworkhealth.com/api/sandbox/v1` mirrors the policy search, code lookup,\nprior-auth check, and coverage evaluation operations with the same request and response shapes. It needs a\n`bwk_test_` key, which `POST /api/sandbox/v1/keys` issues without an account. Test keys work only on the\nsandbox, and the sandbox rejects live keys. Its spec is at `https://backworkhealth.com/api/sandbox/v1/openapi.json`.",
     "version": "1.0.0",
     "contact": {
       "email": "support@backworkhealth.com",
@@ -323,7 +323,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -745,7 +745,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1015,7 +1015,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1349,7 +1349,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1589,7 +1589,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1836,7 +1836,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2107,7 +2107,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2400,7 +2400,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2675,7 +2675,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2983,7 +2983,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3325,7 +3325,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3622,7 +3622,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3867,7 +3867,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4119,7 +4119,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4347,7 +4347,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4554,7 +4554,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4768,7 +4768,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5031,7 +5031,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5283,7 +5283,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5445,7 +5445,7 @@
           "Agent Tools"
         ],
         "summary": "List agent tools",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nReturns the machine-readable tool catalog for controlled agent access, including input schemas, required scopes, approval posture, and whether the authenticated key can invoke each tool. Requires agent tool access and the `read` scope.",
+        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nReturns the machine-readable tool catalog for controlled agent access, including input and output schemas, required scopes, approval posture, and whether the authenticated key can invoke each tool. Requires agent tool access and the `read` scope.",
         "operationId": "listAgentTools",
         "x-backwork-availability": "unavailable-in-production",
         "responses": {
@@ -5477,7 +5477,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5701,7 +5701,7 @@
                         "type": "string"
                       },
                       "additionalProperties": {},
-                      "description": "Tool-specific result payload."
+                      "description": "Tool-specific result payload. Its JSON Schema is the tool's `output_schema` in GET /agent/tools; every result includes a `provenance` block."
                     },
                     "meta": {
                       "$ref": "#/components/schemas/AgentToolInvocationMeta"
@@ -5768,7 +5768,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6036,7 +6036,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6242,7 +6242,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6513,7 +6513,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6778,7 +6778,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7032,7 +7032,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7337,7 +7337,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7602,7 +7602,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7854,7 +7854,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8048,7 +8048,7 @@
             }
           },
           "401": {
-            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`",
+            "description": "Error: `AUTH_MISSING`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_KEY_NOT_FOUND`, `AUTH_KEY_REVOKED`, `AUTH_KEY_SUSPENDED`, `AUTH_TEST_KEY_SANDBOX_ONLY`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8187,7 +8187,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "API Key",
-        "description": "API key in format: bwk_live_xxxxx or bwk_test_xxxxx. Keys issued before the rename (vrt_live_/vrt_test_) remain valid."
+        "description": "API key in format: bwk_live_xxxxx. Keys issued before the rename (vrt_live_) remain valid. bwk_test_ keys work only on the sandbox."
       }
     },
     "schemas": {
@@ -8222,12 +8222,12 @@
         "properties": {
           "code": {
             "type": "string",
-            "pattern": "^[A-Z0-9.-]{2,20}$",
+            "pattern": "^[A-Za-z0-9.-]{2,20}$",
             "description": "CPT, HCPCS, ICD-10-CM, or ICD-10-PCS code"
           },
           "state": {
             "type": "string",
-            "pattern": "^[A-Z]{2}$"
+            "pattern": "^[A-Za-z]{2}$"
           },
           "response_format": {
             "default": "concise",
@@ -8252,7 +8252,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^[A-Z0-9.-]{2,20}$"
+              "pattern": "^[A-Za-z0-9.-]{2,20}$"
             }
           },
           "days_back": {
@@ -8414,6 +8414,34 @@
             "additionalProperties": {},
             "description": "MCP-style alias for input_schema"
           },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "object"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": {},
+            "description": "JSON Schema (draft 2020-12) for the tool's result `data`. Every result carries a `provenance` block with source URLs, retrieval time, effective date, and issuing authority."
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "object"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": {},
+            "description": "MCP-style alias for output_schema"
+          },
           "allowed": {
             "description": "Whether the authenticated key can invoke this tool",
             "type": "boolean"
@@ -8432,7 +8460,9 @@
           "endpoint",
           "method",
           "input_schema",
-          "inputSchema"
+          "inputSchema",
+          "output_schema",
+          "outputSchema"
         ]
       },
       "AgentToolApprovalRequired": {
@@ -8627,7 +8657,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^(?:\\d{5}|[A-Z]\\d{4})$"
+              "pattern": "^(?:\\d{5}|[A-Za-z]\\d{4})$"
             }
           },
           "diagnosis_codes": {
@@ -8635,7 +8665,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^[A-Z][0-9][A-Z0-9](?:\\.?[A-Z0-9]{0,4})?$"
+              "pattern": "^[A-Za-z][0-9][A-Za-z0-9](?:\\.?[A-Za-z0-9]{0,4})?$"
             }
           },
           "modifiers": {
@@ -8643,12 +8673,12 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^[A-Z0-9]{2}$"
+              "pattern": "^[A-Za-z0-9]{2}$"
             }
           },
           "state": {
             "type": "string",
-            "pattern": "^[A-Z]{2}$"
+            "pattern": "^[A-Za-z]{2}$"
           },
           "date_of_service": {
             "type": "string"
@@ -8713,6 +8743,8 @@
           "AUTH_KEY_REVOKED",
           "AUTH_KEY_SUSPENDED",
           "AUTH_KEY_EXPIRED",
+          "AUTH_SANDBOX_TEST_KEY_REQUIRED",
+          "AUTH_TEST_KEY_SANDBOX_ONLY",
           "AUTHZ_SCOPE_REQUIRED",
           "AUTHZ_IP_NOT_ALLOWED",
           "AUTHZ_ORIGIN_NOT_ALLOWED",
