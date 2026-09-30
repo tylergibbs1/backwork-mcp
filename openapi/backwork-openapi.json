@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Backwork Coverage Policy API",
-    "description": "The Backwork API provides programmatic access to Medicare and commercial payer coverage policies,\nmedical code lookups, prior authorization requirements, and policy change tracking.\n\n## Authentication\nAll endpoints (except /health) require an API key passed in the Authorization header:\n```\nAuthorization: Bearer bwk_live_xxxxx\n```\n\n## Rate Limiting\n| Plan | Requests per minute |\n| --- | --- |\n| Free | 10 |\n| Developer | 100 |\n| Practice | 150 |\n| Professional | 300 |\n| Scale | 600 |\n| Enterprise | 2,000 |\n\nThe limit is a sliding one-minute window per organization: every API key in the organization draws on it. An API key with its own per-minute limit uses that limit instead of the plan's. Some endpoints count as more than one request; the rest count as one. See https://backworkhealth.com/docs/rate-limits for endpoint weights.\n\nRate limit headers are included in all responses:\n- `X-RateLimit-Limit`: Maximum requests per window\n- `X-RateLimit-Remaining`: Requests remaining in current window\n- `X-RateLimit-Reset`: Unix timestamp when window resets\n\n## Response Format\nAll responses follow a consistent structure:\n```json\n{\n  \"success\": true,\n  \"data\": { ... },\n  \"meta\": {\n    \"request_id\": \"req_xxxxx\",\n    \"timestamp\": \"2024-01-15T10:30:00Z\"\n  }\n}\n```\n\n## Error Handling\nErrors include machine-readable codes for programmatic handling:\n```json\n{\n  \"success\": false,\n  \"error\": {\n    \"code\": \"RESOURCE_POLICY_NOT_FOUND\",\n    \"message\": \"Policy not found\",\n    \"docUrl\": \"https://backworkhealth.com/docs/errors#resource-policy-not-found\",\n    \"retryable\": false\n  },\n  \"meta\": { \"request_id\": \"req_xxxxx\", \"timestamp\": \"...\" }\n}\n```\nRetry only when `retryable` is true.\n\n## Production Availability\nOperations marked `x-backwork-availability: unavailable-in-production` are not live yet. Production\nrequests to them return 404 with `COMMERCIAL_SURFACE_UNAVAILABLE`.\n\n## Sandbox\nA synthetic-data sandbox at `https://backworkhealth.com/api/sandbox/v1` mirrors the policy search, code lookup,\nprior-auth check, and coverage evaluation operations with the same request and response shapes. It needs a\n`bwk_test_` key, which `POST /api/sandbox/v1/keys` issues without an account. Test keys work only on the\nsandbox, and the sandbox rejects live keys. Its spec is at `https://backworkhealth.com/api/sandbox/v1/openapi.json`.",
+    "description": "The Backwork API provides programmatic access to Medicare and commercial payer coverage policies,\nmedical code lookups, prior authorization requirements, and policy change tracking.\n\n## Authentication\nAll endpoints (except /health) require an API key passed in the Authorization header:\n```\nAuthorization: Bearer bwk_live_xxxxx\n```\n\n## Pricing and Rate Limiting\n| Pack | Price | Requests | Requests per minute | Includes |\n| --- | --- | --- | --- | --- |\n| Credits | $20.00 once | 1,000 requests, never expire | 60 | no overage: calls stop at zero |\n| Build | $200.00 per month | 100,000 requests per month | 300 | overage billed per request |\n| Scale | $1,000.00 per month | 1,000,000 requests per month | 1,000 | overage billed per request, webhooks, [published SLA](https://backworkhealth.com/docs/sla) |\n\nEvery organization starts with 100 free starter credits, granted once; they never expire. Every API key in an organization draws on one balance of request credits and one sliding one-minute rate-limit window. A monthly allowance is spent before purchased Credits, and purchased Credits never expire. On Build and Scale, requests past the allowance bill as overage at $0.002 per request. With only Credits, a call the balance cannot cover returns `402 BILLING_CREDITS_EXHAUSTED`. Some endpoints count as more than one request, for both credits and the rate limit; the rest count as one. See https://backworkhealth.com/docs/rate-limits for the request cost of each endpoint.\n\nRate limit headers are included in all responses:\n- `X-RateLimit-Limit`: Maximum requests per window\n- `X-RateLimit-Remaining`: Requests remaining in current window\n- `X-RateLimit-Reset`: Unix timestamp when window resets\n\n## Response Format\nAll responses follow a consistent structure:\n```json\n{\n  \"success\": true,\n  \"data\": { ... },\n  \"meta\": {\n    \"request_id\": \"req_xxxxx\",\n    \"timestamp\": \"2024-01-15T10:30:00Z\"\n  }\n}\n```\n\n## Error Handling\nErrors include machine-readable codes for programmatic handling:\n```json\n{\n  \"success\": false,\n  \"error\": {\n    \"code\": \"RESOURCE_POLICY_NOT_FOUND\",\n    \"message\": \"Policy not found\",\n    \"docUrl\": \"https://backworkhealth.com/docs/errors#resource-policy-not-found\",\n    \"retryable\": false\n  },\n  \"meta\": { \"request_id\": \"req_xxxxx\", \"timestamp\": \"...\" }\n}\n```\nRetry only when `retryable` is true.\n\n## Production Availability\nOperations marked `x-backwork-availability: unavailable-in-production` are not live yet. Production\nrequests to them return 404 with `COMMERCIAL_SURFACE_UNAVAILABLE`.\n\n## Sandbox\nA synthetic-data sandbox at `https://backworkhealth.com/api/sandbox/v1` mirrors the policy search, code lookup,\nprior-auth check, and coverage evaluation operations with the same request and response shapes. It needs a\n`bwk_test_` key, which `POST /api/sandbox/v1/keys` issues without an account. Test keys work only on the\nsandbox, and the sandbox rejects live keys. Its spec is at `https://backworkhealth.com/api/sandbox/v1/openapi.json`.",
     "version": "1.0.0",
     "contact": {
       "email": "support@backworkhealth.com",
@@ -347,17 +347,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -485,9 +506,8 @@
           "Policies"
         ],
         "summary": "Search and list policies",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nSearch and list coverage policies with filtering and cursor pagination. Supports `keyword` (PostgreSQL full-text) and `semantic` (vector) search modes; semantic results are a single ranked page. Pass `format=csv` or `format=fhir` (or `_format=application/fhir+json`) for CSV or FHIR R4 `CoverageEligibilityResponse` output on eligible plans.",
+        "description": "Search and list coverage policies with filtering and cursor pagination. Supports `keyword` (PostgreSQL full-text) and `semantic` (vector) search modes; semantic results are a single ranked page. Pass `format=csv` or `format=fhir` (or `_format=application/fhir+json`) for CSV or FHIR R4 `CoverageEligibilityResponse` output.",
         "operationId": "listPolicies",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "q",
@@ -505,7 +525,7 @@
           {
             "name": "mode",
             "in": "query",
-            "description": "Search mode. `semantic` requires a Starter plan.",
+            "description": "Search mode. With a `q`, `semantic` counts as 4 requests.",
             "required": false,
             "schema": {
               "default": "keyword",
@@ -769,7 +789,7 @@
             }
           },
           "402": {
-            "description": "Error: `BILLING_FEATURE_REQUIRED`, plan-gate denial",
+            "description": "Error: `BILLING_FEATURE_REQUIRED`, `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
@@ -787,7 +807,7 @@
                   "error": {
                     "code": "BILLING_FEATURE_REQUIRED",
                     "message": "Your current plan does not include this feature",
-                    "hint": "Self-serve plan changes are paused. Request access at hello@backworkhealth.com",
+                    "hint": "Compare plans and API packs, and switch, at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-feature-required",
                     "retryable": false
                   },
@@ -800,7 +820,7 @@
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -813,30 +833,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -904,9 +900,8 @@
           "Policies"
         ],
         "summary": "Get policy by ID",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nRetrieve a single coverage policy by its ID. Use `include` to fetch criteria, codes, attachments, or version history. Policy text sections are fair-use excerpts; the full text is at `source_url`.",
+        "description": "Retrieve a single coverage policy by its ID. Use `include` to fetch criteria, codes, attachments, or version history. Policy text sections are fair-use excerpts; the full text is at `source_url`.",
         "operationId": "getPolicy",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "id",
@@ -1039,17 +1034,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1073,7 +1089,7 @@
             }
           },
           "404": {
-            "description": "Error: `RESOURCE_POLICY_NOT_FOUND`, `COMMERCIAL_SURFACE_UNAVAILABLE`",
+            "description": "Error: `RESOURCE_POLICY_NOT_FOUND`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1152,9 +1168,8 @@
           "Policies"
         ],
         "summary": "Get policy change feed",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nTrack policy updates and modifications over time, newest first. Useful for monitoring policy changes and keeping systems in sync.",
+        "description": "Track policy updates and modifications over time, newest first. Useful for monitoring policy changes and keeping systems in sync.",
         "operationId": "getPolicyChanges",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "since",
@@ -1373,17 +1388,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1396,30 +1432,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -1487,9 +1499,8 @@
           "Policies"
         ],
         "summary": "Compare policies across jurisdictions",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nCompare coverage policies across MAC jurisdictions for the same procedure codes. National policies are listed separately and also applied to every jurisdiction. Requires the multi-MAC compare plan feature. Send `X-Idempotency-Key` for safe retries; a replayed response carries `meta.cached: true`.",
+        "description": "Compare coverage policies across MAC jurisdictions for the same procedure codes. National policies are listed separately and also applied to every jurisdiction. Requires the multi-MAC compare plan feature. Send `X-Idempotency-Key` for safe retries; a replayed response carries `meta.cached: true`.",
         "operationId": "comparePolicies",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "X-Idempotency-Key",
@@ -1613,17 +1624,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1636,30 +1668,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -1860,17 +1868,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1950,9 +1979,8 @@
           "Codes"
         ],
         "summary": "Look up a medical code",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nLooks up medical codes (CPT, HCPCS, ICD-10, NDC) and returns coverage information. When exact match fails and fuzzy is enabled, returns suggestions based on code similarity and description matching.",
+        "description": "Looks up medical codes (CPT, HCPCS, ICD-10, NDC) and returns coverage information. When exact match fails and fuzzy is enabled, returns suggestions based on code similarity and description matching.",
         "operationId": "lookupCode",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "code",
@@ -2131,17 +2159,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2154,30 +2203,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -2245,9 +2270,8 @@
           "Codes"
         ],
         "summary": "Batch code lookup",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nLook up multiple medical codes in a single request. Returns results keyed by code. Maximum 50 codes per request. Fuzzy matching is disabled in batch mode for performance.\n\n**Partial failure handling:** Individual code lookup failures do not abort the batch. A code that cannot be resolved returns `{\"found\": false, \"code\": \"<code>\", \"code_system\": \"UNKNOWN\"}` in the results map instead of causing a request-level error, even when the request includes a `code_system` hint.",
+        "description": "Look up multiple medical codes in a single request. Returns results keyed by code. Maximum 50 codes per request. Fuzzy matching is disabled in batch mode for performance.\n\n**Partial failure handling:** Individual code lookup failures do not abort the batch. A code that cannot be resolved returns `{\"found\": false, \"code\": \"<code>\", \"code_system\": \"UNKNOWN\"}` in the results map instead of causing a request-level error, even when the request includes a `code_system` hint.",
         "operationId": "batchLookupCodes",
-        "x-backwork-availability": "unavailable-in-production",
         "requestBody": {
           "required": true,
           "content": {
@@ -2424,17 +2448,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2447,30 +2492,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -2538,9 +2559,8 @@
           "Spending"
         ],
         "summary": "Get Medicaid spending by code",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nReturns aggregate Medicaid provider spending statistics per HCPCS code, including totals and year-over-year breakdowns from CMS claims data. Provide `code` or `codes`. Requested codes with no data return zeroed totals. Patient counts are publisher row-level sums, not deduplicated people.",
+        "description": "Returns aggregate Medicaid provider spending statistics per HCPCS code, including totals and year-over-year breakdowns from CMS claims data. Provide `code` or `codes`. Requested codes with no data return zeroed totals. Patient counts are publisher row-level sums, not deduplicated people.",
         "operationId": "getSpendingByCode",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "code",
@@ -2699,17 +2719,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2722,30 +2763,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -2813,9 +2830,8 @@
           "Drugs"
         ],
         "summary": "Search drug formulary evidence",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nSearch commercial pharmacy-benefit evidence from CVS Caremark, Express Scripts, and UnitedHealthcare / Optum Rx. Records are informational; verify current coverage, utilization management, and member-specific benefits with the payer.",
+        "description": "Search commercial pharmacy-benefit evidence from CVS Caremark, Express Scripts, and UnitedHealthcare / Optum Rx. Records are informational; verify current coverage, utilization management, and member-specific benefits with the payer.",
         "operationId": "searchDrugFormularyEvidence",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "q",
@@ -3007,17 +3023,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3030,30 +3067,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -3121,9 +3134,8 @@
           "Coverage"
         ],
         "summary": "Search coverage criteria",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nSearch through coverage criteria blocks (indications, limitations, documentation requirements) across active policies.",
+        "description": "Search through coverage criteria blocks (indications, limitations, documentation requirements) across active policies.",
         "operationId": "searchCriteria",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "q",
@@ -3349,17 +3361,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3372,30 +3405,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -3463,9 +3472,8 @@
           "Coverage"
         ],
         "summary": "Evaluate coverage criteria",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nEvaluate an active policy's structured coverage criteria (logic AST) against rule-level parameters. Returns whether the criteria are met, a confidence score, and detailed reasons. Coverage requires every evaluated criteria block to pass. Patient identifiers are rejected with `PHI_NOT_ALLOWED`.\n\nRequires Professional plan or higher.",
+        "description": "Evaluate an active policy's structured coverage criteria (logic AST) against rule-level parameters. Returns whether the criteria are met, a confidence score, and detailed reasons. Coverage requires every evaluated criteria block to pass. Patient identifiers are rejected with `PHI_NOT_ALLOWED`.",
         "operationId": "evaluateCoverage",
-        "x-backwork-availability": "unavailable-in-production",
         "requestBody": {
           "required": true,
           "content": {
@@ -3646,17 +3654,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3680,7 +3709,7 @@
             }
           },
           "404": {
-            "description": "Error: `RESOURCE_POLICY_NOT_FOUND`, `COMMERCIAL_SURFACE_UNAVAILABLE`",
+            "description": "Error: `RESOURCE_POLICY_NOT_FOUND`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3759,9 +3788,8 @@
           "Prior Auth"
         ],
         "summary": "Check prior authorization requirements",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nEvaluate whether Medicare procedures require prior authorization based on procedure codes and state/jurisdiction. Returns matched LCD/NCD policies, coverage disposition, documentation requirements, and clinical criteria. Send `X-Idempotency-Key` to replay the first response for safe retries.",
+        "description": "Evaluate whether Medicare procedures require prior authorization based on procedure codes and state/jurisdiction. Returns matched LCD/NCD policies, coverage disposition, documentation requirements, and clinical criteria. Send `X-Idempotency-Key` to replay the first response for safe retries.",
         "operationId": "checkPriorAuth",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "X-Idempotency-Key",
@@ -3891,17 +3919,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3914,30 +3963,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -4053,9 +4078,8 @@
           "Prior Auth"
         ],
         "summary": "Assess prior authorization packet readiness",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nAssesses clinical documentation against payer documentation requirements using one batched TypeSafe AI (Jev) call: a probability judgment per requirement, a documentation-quality score, and an overall verdict. Requirements between confidence thresholds are marked uncertain and returned as gaps to investigate. Returns 503 (`SERVER_UNAVAILABLE`) when TypeSafe is not configured and approved for sensitive data, and 400 (`PHI_NOT_ALLOWED`) when documentation or requirement text contains patient identifiers.",
+        "description": "Assesses clinical documentation against payer documentation requirements using one batched TypeSafe AI (Jev) call: a probability judgment per requirement, a documentation-quality score, and an overall verdict. Requirements between confidence thresholds are marked uncertain and returned as gaps to investigate. Returns 503 (`SERVER_UNAVAILABLE`) when TypeSafe is not configured and approved for sensitive data, and 400 (`PHI_NOT_ALLOWED`) when documentation or requirement text contains patient identifiers.",
         "operationId": "assessPriorAuthReadiness",
-        "x-backwork-availability": "unavailable-in-production",
         "requestBody": {
           "required": true,
           "content": {
@@ -4143,17 +4167,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4166,30 +4211,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -4281,9 +4302,8 @@
           "Prior Auth"
         ],
         "summary": "Research prior authorization requirements",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nUse AI-powered web research to find prior authorization requirements directly from payer websites. Supports async mode (returns `research_id` and `poll_url` for polling) or synchronous mode (`sync: true`, waits up to two minutes). `clinical_context` is rejected: submit only rule-level `structured_coverage_context` fields. Cost: 5 billable units per request.",
+        "description": "Use AI-powered web research to find prior authorization requirements directly from payer websites. Supports async mode (returns `research_id` and `poll_url` for polling) or synchronous mode (`sync: true`, waits up to two minutes). `clinical_context` is rejected: submit only rule-level `structured_coverage_context` fields. Cost: 5 billable units per request.",
         "operationId": "researchPriorAuth",
-        "x-backwork-availability": "unavailable-in-production",
         "requestBody": {
           "required": true,
           "content": {
@@ -4371,17 +4391,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4394,30 +4435,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -4485,9 +4502,8 @@
           "Prior Auth"
         ],
         "summary": "Get prior authorization research status",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nPoll the status and results of a prior authorization research task until `status` is \"completed\" or \"failed\". When completed, the response includes the full structured research results. No cost for polling.",
+        "description": "Poll the status and results of a prior authorization research task until `status` is \"completed\" or \"failed\". When completed, the response includes the full structured research results. No cost for polling.",
         "operationId": "getPriorAuthResearch",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "id",
@@ -4578,17 +4594,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4612,7 +4649,7 @@
             }
           },
           "404": {
-            "description": "Error: `RESOURCE_POLICY_NOT_FOUND`, `COMMERCIAL_SURFACE_UNAVAILABLE`",
+            "description": "Error: `RESOURCE_POLICY_NOT_FOUND`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4691,9 +4728,8 @@
           "Claims"
         ],
         "summary": "Validate claim coverage risk",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nRun a rule-level, non-PHI pre-submission validation for CPT/HCPCS procedure codes and optional ICD-10 diagnosis/context fields. Returns coverage status, prior-auth requirement, denial risk, and issues that should be resolved before authorization or claim submission. Requires prior authorization checker access.",
+        "description": "Run a rule-level, non-PHI pre-submission validation for CPT/HCPCS procedure codes and optional ICD-10 diagnosis/context fields. Returns coverage status, prior-auth requirement, denial risk, and issues that should be resolved before authorization or claim submission. Requires prior authorization checker access.",
         "operationId": "validateClaim",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "X-Idempotency-Key",
@@ -4792,17 +4828,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4815,30 +4872,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -4954,9 +4987,8 @@
           "Claims"
         ],
         "summary": "Validate coverage and denial risk",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nRun a rule-level, non-PHI pre-submission validation for CPT/HCPCS procedure codes, diagnosis codes, payer context, prior-auth requirements, documentation requirements, and denial risk. Same contract as `POST /claim-validation`. Requires prior authorization checker access.",
+        "description": "Run a rule-level, non-PHI pre-submission validation for CPT/HCPCS procedure codes, diagnosis codes, payer context, prior-auth requirements, documentation requirements, and denial risk. Same contract as `POST /claim-validation`. Requires prior authorization checker access.",
         "operationId": "validateClaims",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "X-Idempotency-Key",
@@ -5055,17 +5087,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5078,30 +5131,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -5217,9 +5246,8 @@
           "Claims"
         ],
         "summary": "Score claim denial risk",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nScores a claim payload against five denial-risk gaps (medical necessity, coding support, prior authorization, documentation completeness, and frequency limits) using one batched TypeSafe AI (Jev) call. Per-risk probabilities are combined in code into an overall risk level and a recommended action. Approved or not-required prior authorization clears that risk; other statuses are assessed against the supplied criteria. Returns 503 (SERVER_UNAVAILABLE) when TypeSafe is not configured and approved for sensitive data, and 400 (PHI_NOT_ALLOWED) when clinical documentation or criteria text contains patient identifiers. Requires prior authorization checker access.",
+        "description": "Scores a claim payload against five denial-risk gaps (medical necessity, coding support, prior authorization, documentation completeness, and frequency limits) using one batched TypeSafe AI (Jev) call. Per-risk probabilities are combined in code into an overall risk level and a recommended action. Approved or not-required prior authorization clears that risk; other statuses are assessed against the supplied criteria. Returns 503 (SERVER_UNAVAILABLE) when TypeSafe is not configured and approved for sensitive data, and 400 (PHI_NOT_ALLOWED) when clinical documentation or criteria text contains patient identifiers. Requires prior authorization checker access.",
         "operationId": "scoreClaimDenialRisk",
-        "x-backwork-availability": "unavailable-in-production",
         "requestBody": {
           "required": true,
           "content": {
@@ -5307,17 +5335,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5330,30 +5379,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -5445,9 +5470,8 @@
           "Agent Tools"
         ],
         "summary": "List agent tools",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nReturns the machine-readable tool catalog for controlled agent access, including input and output schemas, required scopes, approval posture, and whether the authenticated key can invoke each tool. Requires agent tool access and the `read` scope.",
+        "description": "Returns the machine-readable tool catalog for controlled agent access, including input and output schemas, required scopes, approval posture, and whether the authenticated key can invoke each tool. Requires agent tool access and the `read` scope.",
         "operationId": "listAgentTools",
-        "x-backwork-availability": "unavailable-in-production",
         "responses": {
           "200": {
             "description": "Agent tool manifest",
@@ -5501,17 +5525,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5524,30 +5569,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -5615,9 +5636,8 @@
           "Agent Tools"
         ],
         "summary": "Invoke an agent tool",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nInvokes one high-level Backwork tool through the controlled agent access layer. Use `GET /agent/tools` first to fetch the exact input schema for each tool. Read tools accept `read`, `admin`, `agent:tool:*`, or the tool-specific `agent:tool:<tool_id>` scope; write tools require `write`, `admin`, `agent:tool:*`, or the tool-specific scope. A key that holds any `agent:tool:` scope is limited to its agent scopes. `acknowledge_policy_change` also requires a plan with compliance dashboard access. Requests containing patient-identifying field names are rejected with `PHI_NOT_ALLOWED`.",
+        "description": "Invokes one high-level Backwork tool through the controlled agent access layer. Use `GET /agent/tools` first to fetch the exact input schema for each tool. Read tools accept `read`, `admin`, `agent:tool:*`, or the tool-specific `agent:tool:<tool_id>` scope; write tools require `write`, `admin`, `agent:tool:*`, or the tool-specific scope. A key that holds any `agent:tool:` scope is limited to its agent scopes. `acknowledge_policy_change` also requires a plan with compliance dashboard access. Requests containing patient-identifying field names are rejected with `PHI_NOT_ALLOWED`.",
         "operationId": "invokeAgentTool",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "tool",
@@ -5792,7 +5812,7 @@
             }
           },
           "402": {
-            "description": "Error: `BILLING_FEATURE_REQUIRED`, plan-gate denial",
+            "description": "Error: `BILLING_FEATURE_REQUIRED`, `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
@@ -5810,7 +5830,7 @@
                   "error": {
                     "code": "BILLING_FEATURE_REQUIRED",
                     "message": "Your current plan does not include this feature",
-                    "hint": "Self-serve plan changes are paused. Request access at hello@backworkhealth.com",
+                    "hint": "Compare plans and API packs, and switch, at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-feature-required",
                     "retryable": false
                   },
@@ -5823,7 +5843,7 @@
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5836,30 +5856,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -6060,17 +6056,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6266,17 +6283,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6537,17 +6575,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6802,17 +6861,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7056,17 +7136,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7217,9 +7318,8 @@
           "Compliance"
         ],
         "summary": "List unreviewed policy changes",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nReturns policy changes from the last 30 days that have not been acknowledged by the authenticated organization. Supports cursor-based pagination. Requires a plan with the compliance dashboard.",
+        "description": "Returns policy changes from the last 30 days that have not been acknowledged by the authenticated organization. Supports cursor-based pagination. Requires a plan with the compliance dashboard.",
         "operationId": "listUnreviewedChanges",
-        "x-backwork-availability": "unavailable-in-production",
         "parameters": [
           {
             "name": "change_type",
@@ -7361,17 +7461,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7384,30 +7505,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -7626,17 +7723,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7878,17 +7996,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8016,9 +8155,8 @@
           "Compliance"
         ],
         "summary": "Get compliance statistics",
-        "description": "**Not available in production yet.** Production requests return `404 COMMERCIAL_SURFACE_UNAVAILABLE`. Use `GET /releases/{releaseId}/decisions` instead.\n\nReturns compliance dashboard statistics for the authenticated organization, including total changes, acknowledgment count, acknowledgment rate, and critical unreviewed count for the last 30 days. Requires a plan with the compliance dashboard.",
+        "description": "Returns compliance dashboard statistics for the authenticated organization, including total changes, acknowledgment count, acknowledgment rate, and critical unreviewed count for the last 30 days. Requires a plan with the compliance dashboard.",
         "operationId": "getComplianceStats",
-        "x-backwork-availability": "unavailable-in-production",
         "responses": {
           "200": {
             "description": "Compliance statistics",
@@ -8072,17 +8210,38 @@
             }
           },
           "402": {
-            "description": "Error: plan-gate denial",
+            "description": "Error: `BILLING_CREDITS_EXHAUSTED`, plan-gate denial",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GateDenialResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GateDenialResponse"
+                    }
+                  ]
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "BILLING_CREDITS_EXHAUSTED",
+                    "message": "Your organization has no request credits left for this call",
+                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
+                    "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
                 }
               }
             }
           },
           "403": {
-            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`, `AUTHZ_LIVE_KEY_PLAN_REQUIRED`",
+            "description": "Error: `AUTHZ_SCOPE_REQUIRED`, `AUTHZ_ORIGIN_NOT_ALLOWED`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8095,30 +8254,6 @@
                     "message": "Insufficient permissions for this operation",
                     "hint": "details.required_scopes lists the scopes this operation accepts",
                     "docUrl": "https://backworkhealth.com/docs/errors#authz-scope-required",
-                    "retryable": false
-                  },
-                  "meta": {
-                    "request_id": "req_abc123",
-                    "timestamp": "2024-01-15T10:30:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error: `COMMERCIAL_SURFACE_UNAVAILABLE`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "example": {
-                  "success": false,
-                  "error": {
-                    "code": "COMMERCIAL_SURFACE_UNAVAILABLE",
-                    "message": "This endpoint is not available in production yet.",
-                    "hint": "Use GET /api/v1/releases/{releaseId}/decisions, or request access at hello@backworkhealth.com",
-                    "docUrl": "https://backworkhealth.com/docs/errors#commercial-surface-unavailable",
                     "retryable": false
                   },
                   "meta": {
@@ -8748,8 +8883,8 @@
           "AUTHZ_SCOPE_REQUIRED",
           "AUTHZ_IP_NOT_ALLOWED",
           "AUTHZ_ORIGIN_NOT_ALLOWED",
-          "AUTHZ_LIVE_KEY_PLAN_REQUIRED",
           "BILLING_FEATURE_REQUIRED",
+          "BILLING_CREDITS_EXHAUSTED",
           "RATE_LIMIT_EXCEEDED",
           "RATE_QUOTA_EXCEEDED",
           "RATE_CONCURRENT_EXCEEDED",
@@ -9664,6 +9799,9 @@
           "disposition": {
             "type": "string"
           },
+          "source": {
+            "$ref": "#/components/schemas/CodeSource"
+          },
           "jurisdiction": {
             "type": [
               "string",
@@ -9688,10 +9826,19 @@
           "title",
           "policy_type",
           "disposition",
+          "source",
           "jurisdiction",
           "effective_date",
           "source_url"
         ]
+      },
+      "CodeSource": {
+        "type": "string",
+        "enum": [
+          "document",
+          "inferred_title_match"
+        ],
+        "description": "document: listed in the payer's policy document. inferred_title_match: attached because the policy title names the drug; the document itself does not list the code."
       },
       "CodeSpendingData": {
         "type": "object",
@@ -9855,12 +10002,16 @@
                 },
                 "disposition": {
                   "type": "string"
+                },
+                "source": {
+                  "$ref": "#/components/schemas/CodeSource"
                 }
               },
               "required": [
                 "code",
                 "code_system",
-                "disposition"
+                "disposition",
+                "source"
               ]
             }
           }
@@ -11450,6 +11601,9 @@
               "string",
               "null"
             ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/CodeSource"
           }
         },
         "required": [
@@ -11457,7 +11611,8 @@
           "display",
           "disposition",
           "condition_reference",
-          "notes"
+          "notes",
+          "source"
         ]
       },
       "PolicyCompareRequest": {
@@ -12035,12 +12190,16 @@
                 },
                 "disposition": {
                   "type": "string"
+                },
+                "source": {
+                  "$ref": "#/components/schemas/CodeSource"
                 }
               },
               "required": [
                 "code",
                 "code_system",
-                "disposition"
+                "disposition",
+                "source"
               ]
             }
           },
@@ -12240,13 +12399,17 @@
                           "string",
                           "null"
                         ]
+                      },
+                      "source": {
+                        "$ref": "#/components/schemas/CodeSource"
                       }
                     },
                     "required": [
                       "code",
                       "code_system",
                       "disposition",
-                      "condition_reference"
+                      "condition_reference",
+                      "source"
                     ]
                   }
                 }

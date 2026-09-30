@@ -10,6 +10,8 @@
  */
 
 export type Availability = "available" | "unavailable-in-production";
+/** API key scope an operation needs. Mirrors `x-backwork-required-scopes`: `write` when listed, `read` otherwise. */
+export type Scope = "read" | "write";
 
 export interface BackworkOperation {
   readonly method: "GET" | "POST" | "PATCH" | "DELETE";
@@ -22,6 +24,7 @@ export interface BackworkOperation {
   readonly reads: readonly string[];
   /** Mirrors the operation's `x-backwork-availability` marker in the published OpenAPI document. */
   readonly availability: Availability;
+  readonly scope: Scope;
 }
 
 const none: readonly string[] = [];
@@ -47,7 +50,8 @@ export const BACKWORK_OPERATIONS = {
       "policies[].effective_date",
       "suggestions",
     ],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   batchLookupCodes: {
     method: "POST",
@@ -56,7 +60,8 @@ export const BACKWORK_OPERATIONS = {
     body: ["codes", "code_system", "include"],
     headers: none,
     reads: ["results"],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   checkPriorAuth: {
     method: "POST",
@@ -77,7 +82,8 @@ export const BACKWORK_OPERATIONS = {
       "policy_sources[].effective_date",
       "policy_sources[].last_verified_at",
     ],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   validateClaims: {
     method: "POST",
@@ -115,7 +121,8 @@ export const BACKWORK_OPERATIONS = {
       "policy_sources[].effective_date",
       "policy_sources[].last_verified_at",
     ],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   comparePolicies: {
     method: "POST",
@@ -124,7 +131,8 @@ export const BACKWORK_OPERATIONS = {
     body: ["procedure_codes", "jurisdictions"],
     headers: none,
     reads: ["comparison", "summary.total_jurisdictions", "summary.jurisdictions_with_coverage", "summary.has_variation"],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   getSpendingByCode: {
     method: "GET",
@@ -133,7 +141,8 @@ export const BACKWORK_OPERATIONS = {
     body: none,
     headers: none,
     reads: none,
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   listPolicies: {
     method: "GET",
@@ -151,7 +160,8 @@ export const BACKWORK_OPERATIONS = {
       "[].source_url",
       "[].payer",
     ],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   getPolicy: {
     method: "GET",
@@ -172,7 +182,8 @@ export const BACKWORK_OPERATIONS = {
       "criteria",
       "codes",
     ],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   searchCriteria: {
     method: "GET",
@@ -181,7 +192,8 @@ export const BACKWORK_OPERATIONS = {
     body: none,
     headers: none,
     reads: ["[].section", "[].text", "[].policy_id", "[].effective_date"],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   getPolicyChanges: {
     method: "GET",
@@ -190,7 +202,8 @@ export const BACKWORK_OPERATIONS = {
     body: none,
     headers: none,
     reads: ["[].change_type", "[].policy_id", "[].policy_title", "[].changed_at", "[].change_summary"],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   listJurisdictions: {
     method: "GET",
@@ -200,6 +213,7 @@ export const BACKWORK_OPERATIONS = {
     headers: none,
     reads: ["[].jurisdiction_code", "[].jurisdiction_name", "[].mac_name", "[].states", "[].website_url"],
     availability: "available",
+    scope: "read",
   },
   evaluateCoverage: {
     method: "POST",
@@ -208,7 +222,8 @@ export const BACKWORK_OPERATIONS = {
     body: ["policy_id", "parameters"],
     headers: none,
     reads: none,
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   getPriorAuthResearch: {
     method: "GET",
@@ -217,7 +232,8 @@ export const BACKWORK_OPERATIONS = {
     body: none,
     headers: none,
     reads: ["research_id", "status", "created_at", "finished_at", "poll_url", "result", "error"],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   researchPriorAuth: {
     method: "POST",
@@ -226,7 +242,8 @@ export const BACKWORK_OPERATIONS = {
     body: ["procedure_codes", "payer", "state", "diagnosis_codes", "sync"],
     headers: none,
     reads: ["research_id", "status", "created_at", "finished_at", "poll_url", "result", "error"],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   searchDrugFormularyEvidence: {
     method: "GET",
@@ -235,7 +252,8 @@ export const BACKWORK_OPERATIONS = {
     body: none,
     headers: none,
     reads: ["[].source_url", "[].payer_name", "[].effective_date"],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   getComplianceStats: {
     method: "GET",
@@ -244,7 +262,8 @@ export const BACKWORK_OPERATIONS = {
     body: none,
     headers: none,
     reads: none,
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   listUnreviewedChanges: {
     method: "GET",
@@ -253,7 +272,8 @@ export const BACKWORK_OPERATIONS = {
     body: none,
     headers: none,
     reads: ["[].policy_id", "[].policy_title", "[].change_type", "[].policy_type", "[].payer_name", "[].diff_id"],
-    availability: "unavailable-in-production",
+    availability: "available",
+    scope: "read",
   },
   acknowledgeChange: {
     method: "POST",
@@ -263,6 +283,7 @@ export const BACKWORK_OPERATIONS = {
     headers: none,
     reads: none,
     availability: "available",
+    scope: "write",
   },
   bulkAcknowledgeChanges: {
     method: "POST",
@@ -272,6 +293,7 @@ export const BACKWORK_OPERATIONS = {
     headers: none,
     reads: none,
     availability: "available",
+    scope: "write",
   },
   listWebhooks: {
     method: "GET",
@@ -281,6 +303,7 @@ export const BACKWORK_OPERATIONS = {
     headers: none,
     reads: ["[].id", "[].url", "[].status", "[].events"],
     availability: "available",
+    scope: "write",
   },
   createWebhook: {
     method: "POST",
@@ -290,6 +313,7 @@ export const BACKWORK_OPERATIONS = {
     headers: none,
     reads: ["id", "url", "secret"],
     availability: "available",
+    scope: "write",
   },
   updateWebhook: {
     method: "PATCH",
@@ -299,6 +323,7 @@ export const BACKWORK_OPERATIONS = {
     headers: none,
     reads: none,
     availability: "available",
+    scope: "write",
   },
   deleteWebhook: {
     method: "DELETE",
@@ -308,6 +333,7 @@ export const BACKWORK_OPERATIONS = {
     headers: none,
     reads: none,
     availability: "available",
+    scope: "write",
   },
   testWebhook: {
     method: "POST",
@@ -317,6 +343,7 @@ export const BACKWORK_OPERATIONS = {
     headers: none,
     reads: none,
     availability: "available",
+    scope: "write",
   },
   getHealth: {
     method: "GET",
@@ -326,6 +353,7 @@ export const BACKWORK_OPERATIONS = {
     headers: none,
     reads: none,
     availability: "available",
+    scope: "read",
   },
 } as const satisfies Record<string, BackworkOperation>;
 
@@ -359,13 +387,25 @@ export function operationPath(id: OperationId, pathParams: Record<string, string
 
 export const PRODUCTION_API_ORIGIN = "https://backworkhealth.com";
 
+/** Where a server sends requests and what its caller's credential may do. */
+export interface ExposureContext {
+  readonly apiBase: string;
+  /** `read` for the hosted OAuth grant (`backwork:mcp read`); `write` for a Backwork API key. */
+  readonly access: Scope;
+  /** Operator opt-in to offer operations the production API marks unavailable. */
+  readonly exposeUnavailable: boolean;
+}
+
+export type Exposure = "offered" | "unavailable-in-production" | "needs-write-access";
+
 /**
- * Availability markers describe the production API. A self-hosted server that
- * points at another Backwork deployment, or an operator who opts in, sees
- * every operation.
+ * Whether a tool may call an operation. Availability markers describe the
+ * production API only: a server pointed at another Backwork deployment, or an
+ * operator who opts in, sees every operation. Scope applies everywhere.
  */
-export function isOperationAvailable(id: OperationId, apiBase: string, exposeUnavailable: boolean): boolean {
-  if (exposeUnavailable) return true;
-  if (new URL(apiBase).origin !== PRODUCTION_API_ORIGIN) return true;
-  return BACKWORK_OPERATIONS[id].availability === "available";
+export function operationExposure(operation: BackworkOperation, context: ExposureContext): Exposure {
+  if (operation.scope === "write" && context.access === "read") return "needs-write-access";
+  if (context.exposeUnavailable) return "offered";
+  if (new URL(context.apiBase).origin !== PRODUCTION_API_ORIGIN) return "offered";
+  return operation.availability === "available" ? "offered" : "unavailable-in-production";
 }

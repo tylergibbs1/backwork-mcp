@@ -4,7 +4,11 @@
  */
 
 const AVAILABILITY_KEY = "x-backwork-availability";
+const SCOPES_KEY = "x-backwork-required-scopes";
 const UNAVAILABLE = "unavailable-in-production";
+const PRODUCTION_API_BASE = "https://backworkhealth.com/api/v1";
+// Prose the platform may reword without changing the contract.
+const PROSE_KEYS = new Set(["description", "summary", "example", "examples"]);
 
 function resolve(spec, schema) {
   let current = schema;
@@ -58,21 +62,27 @@ function successDataSchema(spec, operation) {
     .filter(Boolean);
 }
 
+function operationIn(spec, entry) {
+  return spec.paths?.[entry.path]?.[entry.method.toLowerCase()];
+}
+
+function scopeIn(operation) {
+  return (operation[SCOPES_KEY] ?? []).includes("write") ? "write" : "read";
+}
+
 /**
+ * Every problem is drift: the catalog must mirror each request field, read
+ * field, availability marker and required scope of the operations it calls.
+ *
  * @param {object} spec OpenAPI document
  * @param {Record<string, import("../build/src/api-operations.js").BackworkOperation>} catalog
- * @param {{ availability: "exact" | "no-silent-failures" }} options
- *   "exact" requires the catalog to mirror every marker. "no-silent-failures"
- *   only fails when the document marks an operation unavailable that the
- *   catalog still treats as available; the reverse is reported as a warning.
  */
-export function checkContract(spec, catalog, options = { availability: "exact" }) {
+export function checkContract(spec, catalog) {
   const problems = [];
-  const warnings = [];
 
   for (const [id, entry] of Object.entries(catalog)) {
     const where = `${id} (${entry.method} ${entry.path})`;
-    const operation = spec.paths?.[entry.path]?.[entry.method.toLowerCase()];
+    const operation = operationIn(spec, entry);
     if (!operation) {
       problems.push(`${where}: operation is not in the OpenAPI document`);
       continue;
@@ -110,11 +120,72 @@ export function checkContract(spec, catalog, options = { availability: "exact" }
 
     const marker = operation[AVAILABILITY_KEY] === UNAVAILABLE ? UNAVAILABLE : "available";
     if (marker !== entry.availability) {
-      const message = `${where}: catalog availability is "${entry.availability}" but the document says "${marker}"`;
-      if (options.availability === "exact" || marker === UNAVAILABLE) problems.push(message);
-      else warnings.push(message);
+      problems.push(`${where}: catalog availability is "${entry.availability}" but the document says "${marker}"`);
+    }
+    if (scopeIn(operation) !== entry.scope) {
+      problems.push(`${where}: catalog scope is "${entry.scope}" but the document requires "${scopeIn(operation)}"`);
     }
   }
 
-  return { problems, warnings };
+  return problems;
+}
+
+/**
+ * Asks the server's own exposure rule which tool actions it offers against the
+ * production API, for a read-only OAuth grant and for a write-scoped API key,
+ * and fails for any offered action whose operation the document does not serve
+ * to that credential. This holds even if the catalog itself is stale.
+ *
+ * @param {object} spec OpenAPI document
+ * @param {Record<string, import("../build/src/api-operations.js").BackworkOperation>} catalog
+ * @param {Record<string, Record<string, readonly string[]>>} toolOperations
+ * @param {typeof import("../build/src/api-operations.js").operationExposure} operationExposure
+ */
+export function checkExposure(spec, catalog, toolOperations, operationExposure) {
+  const problems = [];
+  for (const access of ["read", "write"]) {
+    const context = { apiBase: PRODUCTION_API_BASE, access, exposeUnavailable: false };
+    for (const [tool, actions] of Object.entries(toolOperations)) {
+      for (const [action, ids] of Object.entries(actions)) {
+        if (ids.some((id) => operationExposure(catalog[id], context) !== "offered")) continue;
+        for (const id of ids) {
+          const where = `backwork_${tool} '${action}' (${access} access) calls ${id}`;
+          const operation = operationIn(spec, catalog[id]);
+          if (!operation) problems.push(`${where}, which production does not serve`);
+          else if (operation[AVAILABILITY_KEY] === UNAVAILABLE) problems.push(`${where}, which production marks unavailable`);
+          else if (access === "read" && scopeIn(operation) === "write") problems.push(`${where}, which needs write scope`);
+        }
+      }
+    }
+  }
+  return problems;
+}
+
+function withoutProse(value) {
+  if (Array.isArray(value)) return value.map(withoutProse);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !PROSE_KEYS.has(key))
+      .map(([key, child]) => [key, withoutProse(child)]),
+  );
+}
+
+function differences(a, b, pointer, out) {
+  if (JSON.stringify(a) === JSON.stringify(b)) return;
+  const bothObjects = a && b && typeof a === "object" && typeof b === "object" && Array.isArray(a) === Array.isArray(b);
+  if (!bothObjects) {
+    out.push(pointer || "/");
+    return;
+  }
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    differences(a[key], b[key], `${pointer}/${String(key).replaceAll("~", "~0").replaceAll("/", "~1")}`, out);
+  }
+}
+
+/** JSON pointers where two OpenAPI documents disagree, ignoring descriptions, summaries and examples. */
+export function specDifferences(vendored, published) {
+  const out = [];
+  differences(withoutProse(vendored), withoutProse(published), "", out);
+  return out;
 }

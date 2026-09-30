@@ -25,7 +25,8 @@ jobs:
       - run: npm test
       - run: npm pack --dry-run
       # Fails when the published Backwork OpenAPI document no longer accepts a
-      # request field or declares a response field this server uses, or newly
-      # marks an operation it calls as unavailable in production.
+      # request field or declares a response field this server uses, when a tool
+      # action is offered for an operation production does not serve, or when
+      # the vendored openapi/backwork-openapi.json no longer matches it.
       - run: npm run contract:live
 
