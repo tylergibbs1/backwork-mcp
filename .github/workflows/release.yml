@@ -1,5 +1,8 @@
 name: Release
 
+# Publishes with npm Trusted Publishing (GitHub OIDC). No npm token is stored
+# anywhere: npmjs.com trusts this exact repo + workflow file + environment.
+
 on:
   push:
     tags:
@@ -8,12 +11,19 @@ on:
 
 permissions:
   contents: read
-  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  npm:
     runs-on: ubuntu-latest
+    # Must match the environment configured on npmjs.com for @backwork/mcp.
     environment: npm
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v5
@@ -21,11 +31,74 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
-          cache: npm
-          registry-url: "https://registry.npmjs.org"
+          # No cache in the publishing job: a poisoned cache must not reach npm.
+          package-manager-cache: false
+
+      # Trusted publishing needs npm >= 11.5.1.
+      - run: npm install -g npm@^11.5.1 && npm --version
+
+      - name: Verify tag matches package.json version
+        run: npm run guard:release-tag
 
       - run: npm ci
-      - run: npm run guard:release-tag
+      # Builds, runs the smoke tests and unit tests (including server.json vs
+      # package.json version agreement), and checks the OpenAPI contract.
       - run: npm test
       - run: npm pack --dry-run
-      - run: npm publish --provenance --access public
+
+      - name: Publish to npm
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "@backwork/mcp@${version}" version >/dev/null 2>&1; then
+            echo "@backwork/mcp@${version} is already on npm; skipping publish."
+          else
+            npm publish --provenance --access public
+          fi
+
+  mcp-registry:
+    needs: npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.1
+      MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      # The registry verifies ownership by reading mcpName from the published
+      # npm package, so wait until the new version is visible.
+      - name: Wait for the npm release to be visible
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          expected="$(node -p "require('./server.json').name")"
+          for attempt in $(seq 1 30); do
+            actual="$(npm view "@backwork/mcp@${version}" mcpName 2>/dev/null || true)"
+            if [ "$actual" = "$expected" ]; then
+              echo "@backwork/mcp@${version} is live with mcpName ${actual}"
+              exit 0
+            fi
+            echo "Attempt ${attempt}: waiting for @backwork/mcp@${version} on npm"
+            sleep 10
+          done
+          echo "::error::@backwork/mcp@${version} with mcpName ${expected} never appeared on npm"
+          exit 1
+
+      - name: Install mcp-publisher
+        run: |
+          archive=mcp-publisher_linux_amd64.tar.gz
+          curl -fsSL -o "$archive" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/${archive}"
+          echo "${MCP_PUBLISHER_SHA256}  ${archive}" | sha256sum --check
+          tar xzf "$archive" mcp-publisher
+
+      # io.github.tylergibbs1/* is proven by this workflow's GitHub OIDC token.
+      - run: ./mcp-publisher login github-oidc
+      - run: ./mcp-publisher publish server.json

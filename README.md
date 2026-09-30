@@ -1,60 +1,30 @@
 # Backwork MCP Server
 
-Official Model Context Protocol (MCP) server for the [Backwork API](https://backworkhealth.com). It gives AI assistants controlled access to Medicare coverage policies, medical code intelligence, prior authorization checks, claim validation, compliance review, drug formulary evidence, and webhook operations.
+[![npm](https://img.shields.io/npm/v/@backwork/mcp)](https://www.npmjs.com/package/@backwork/mcp)
 
-## Current Setup
+Official Model Context Protocol (MCP) server for the [Backwork API](https://backworkhealth.com). It gives AI assistants controlled access to Medicare and payer medical policies, medical code intelligence, prior authorization checks, claim validation, compliance review, drug formulary evidence, and webhook operations.
 
-For Claude Code, use the hosted Streamable HTTP MCP endpoint with OAuth. This does not require copying a Backwork API key into Claude Code:
+There are two ways to connect:
 
-```bash
-claude mcp remove backwork 2>/dev/null || true
-claude mcp add --transport http --scope user backwork https://backworkhealth.com/mcp
-```
+| | Hosted remote | Local stdio |
+| --- | --- | --- |
+| Endpoint | `https://backworkhealth.com/mcp` (Streamable HTTP) | `npx -y @backwork/mcp` |
+| Auth | OAuth in the browser, no key to copy | `BACKWORK_API_KEY=bwk_live_...` |
+| Use when | Your client supports remote MCP with OAuth | Your client only runs local commands, or you want the server on your machine |
 
-Then start Claude Code, run `/mcp`, select `backwork`, complete the browser login, and approve the Backwork consent screen.
-
-Codex currently uses the local stdio server with a Backwork API key:
-
-```bash
-export BACKWORK_API_KEY=bwk_live_YOUR_API_KEY
-codex mcp add backwork --env BACKWORK_API_KEY=$BACKWORK_API_KEY -- npx -y @backwork/mcp
-```
-
-Use the local stdio setup when your MCP client does not support remote Streamable HTTP yet, or when you want to run the server entirely on your machine.
-
-## Codex
-
-Use local stdio with a Backwork API key:
-
-```bash
-export BACKWORK_API_KEY=bwk_live_YOUR_API_KEY
-codex mcp add backwork --env BACKWORK_API_KEY=$BACKWORK_API_KEY -- npx -y @backwork/mcp
-```
-
-The hosted Backwork MCP endpoint requires OAuth. Do not use a Backwork API key as a bearer token against `https://backworkhealth.com/mcp`. If you operate a private self-hosted HTTP server in API-key or dual-auth mode, Codex can connect to that private URL with `--bearer-token-env-var`.
+The hosted endpoint only accepts OAuth. Do not send a Backwork API key as a bearer token to `https://backworkhealth.com/mcp`.
 
 ## Claude Code
 
-For hosted Streamable HTTP, use OAuth:
-
 ```bash
-claude mcp remove backwork 2>/dev/null || true
-claude mcp add --transport http --scope user backwork https://backworkhealth.com/mcp
+claude mcp add backwork --transport http https://backworkhealth.com/mcp
 ```
 
-Then run `claude`, open `/mcp`, and authenticate `backwork`. Claude Code discovers the OAuth protected-resource metadata, opens your browser, sends you through Backwork login, and stores the OAuth token after you approve the consent screen.
-
-Verify the server is configured:
-
-```bash
-claude mcp list
-claude mcp get backwork
-```
+Add `--scope user` to make it available in every project. Then run `claude`, open `/mcp`, select `backwork`, and finish the browser login and Backwork consent screen. Check it with `claude mcp get backwork`.
 
 If OAuth discovery needs to be pinned explicitly, add the same server as JSON:
 
 ```bash
-claude mcp remove backwork 2>/dev/null || true
 claude mcp add-json backwork '{
   "type": "http",
   "url": "https://backworkhealth.com/mcp",
@@ -64,16 +34,17 @@ claude mcp add-json backwork '{
 }'
 ```
 
-For older clients that cannot complete remote OAuth, use local stdio:
+Local stdio:
 
 ```bash
-export BACKWORK_API_KEY=bwk_live_YOUR_API_KEY
-claude mcp add backwork -e BACKWORK_API_KEY=$BACKWORK_API_KEY -- npx -y @backwork/mcp
+claude mcp add backwork -e BACKWORK_API_KEY=bwk_live_YOUR_API_KEY -- npx -y @backwork/mcp
 ```
 
-## Cursor, VS Code, Windsurf, and Other MCP Clients
+## Claude Desktop
 
-For clients that only support stdio commands:
+Hosted remote: open **Settings > Connectors > Add custom connector**, name it `Backwork`, and enter `https://backworkhealth.com/mcp`. Claude Desktop runs the OAuth login when you connect.
+
+Local stdio: add this to `claude_desktop_config.json` (**Settings > Developer > Edit Config**) and restart Claude Desktop:
 
 ```json
 {
@@ -89,7 +60,91 @@ For clients that only support stdio commands:
 }
 ```
 
-The hosted Backwork MCP endpoint requires OAuth. For clients that support only remote URLs and static headers, deploy a private self-hosted server in API-key or dual-auth mode and set the bearer header using the client's documented secret mechanism. If the client only accepts static JSON, replace the placeholder directly:
+## Cursor
+
+Add to `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project). Cursor opens the OAuth login the first time it connects:
+
+```json
+{
+  "mcpServers": {
+    "backwork": {
+      "url": "https://backworkhealth.com/mcp"
+    }
+  }
+}
+```
+
+Local stdio:
+
+```json
+{
+  "mcpServers": {
+    "backwork": {
+      "command": "npx",
+      "args": ["-y", "@backwork/mcp"],
+      "env": {
+        "BACKWORK_API_KEY": "bwk_live_YOUR_API_KEY"
+      }
+    }
+  }
+}
+```
+
+## VS Code
+
+```bash
+code --add-mcp '{"name":"backwork","type":"http","url":"https://backworkhealth.com/mcp"}'
+```
+
+Or add it to `.vscode/mcp.json` in a workspace. VS Code asks you to sign in when the server starts:
+
+```json
+{
+  "servers": {
+    "backwork": {
+      "type": "http",
+      "url": "https://backworkhealth.com/mcp"
+    }
+  }
+}
+```
+
+Local stdio, with the key prompted for once and stored by VS Code:
+
+```json
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "backwork-api-key",
+      "description": "Backwork API key",
+      "password": true
+    }
+  ],
+  "servers": {
+    "backwork": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@backwork/mcp"],
+      "env": {
+        "BACKWORK_API_KEY": "${input:backwork-api-key}"
+      }
+    }
+  }
+}
+```
+
+## Codex
+
+```bash
+codex mcp add backwork --env BACKWORK_API_KEY=bwk_live_YOUR_API_KEY -- npx -y @backwork/mcp
+```
+
+## Other MCP Clients
+
+Clients that run local commands can use the stdio config shown for Claude Desktop. Clients that support remote URLs with OAuth can use `https://backworkhealth.com/mcp` directly.
+
+For clients that support only remote URLs with static headers, deploy a private self-hosted server in API-key or dual-auth mode (see [Self-Hosting](#self-hosting)) and send the key as a bearer header:
 
 ```json
 {
@@ -299,18 +354,24 @@ The `evals/` directory includes a tool-discoverability evaluation and a read-onl
 
 ## MCP Registry
 
-`server.json` describes this server for the [official MCP registry](https://registry.modelcontextprotocol.io): the hosted Streamable HTTP remote at `https://backworkhealth.com/mcp` (OAuth, discovered from the protected-resource metadata) and the `@backwork/mcp` npm package over stdio. `package.json` carries the matching `mcpName` that the registry uses to verify npm ownership, so the npm release must include it before the manifest is published. Keep `version` in `server.json`, `package.json`, and `SERVER_VERSION` in `src/index.ts` equal; `npm test` checks this.
+`server.json` describes this server for the [official MCP registry](https://registry.modelcontextprotocol.io) as `io.github.tylergibbs1/backwork-mcp`: the hosted Streamable HTTP remote at `https://backworkhealth.com/mcp` (OAuth, discovered from the protected-resource metadata) and the `@backwork/mcp` npm package over stdio. `package.json` carries the matching `mcpName` that the registry uses to verify npm ownership. `npm test` validates `server.json` against the registry schema and checks that its versions match `package.json`.
 
 ## Release
 
-The package publishes to npm as `@backwork/mcp`.
+Releases publish `@backwork/mcp` to npm with [Trusted Publishing](https://docs.npmjs.com/trusted-publishers) (GitHub OIDC, no npm token) and then publish `server.json` to the MCP registry.
 
-The npm package is available under the Backwork scope as `@backwork/mcp`.
+1. `npm version minor` (or `patch`/`major`). The `version` script copies the new version into `server.json` and `SERVER_VERSION` in `src/index.ts`.
+2. Merge that change to `main`.
+3. Push a matching tag from `main`, for example `git tag v2.1.0 && git push origin v2.1.0`.
 
-1. Configure npm Trusted Publishing for `tylergibbs1/backwork-mcp`, workflow `release.yml`, environment `npm`, package `@backwork/mcp`.
-2. Update `package.json` and `package-lock.json` to the new version.
-3. Push a matching tag, for example `v2.0.0`.
-4. The release workflow installs with `npm ci`, runs the build/smoke test, verifies `npm pack --dry-run`, and publishes with npm provenance.
+The `Release` workflow then:
+
+1. Fails unless the tag equals `v` + the `package.json` version.
+2. Runs `npm ci`, `npm test` (build, smoke tests, unit tests, OpenAPI contract), and `npm pack --dry-run`.
+3. Publishes to npm with provenance, in the `npm` environment. A version already on npm is skipped, so a failed run can be re-run.
+4. Waits for the version to appear on npm, then runs `mcp-publisher login github-oidc` and `mcp-publisher publish`.
+
+One-time npm setup: on npmjs.com, open `@backwork/mcp` > **Settings** > **Trusted publishing**, choose GitHub Actions, and enter user `tylergibbs1`, repository `backwork-mcp`, workflow `release.yml`, environment `npm`.
 
 ## Environment Variables
 
@@ -387,4 +448,4 @@ Wait for the reset window or use a higher-capacity API plan.
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).

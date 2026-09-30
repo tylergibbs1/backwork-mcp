@@ -1,7 +1,7 @@
 {
   "name": "@backwork/mcp",
-  "version": "2.0.1",
-  "description": "MCP server for the Backwork healthcare API - Medicare coverage policies, prior auth, and medical codes",
+  "version": "2.1.0",
+  "description": "MCP server for Backwork: Medicare and payer medical policy, prior authorization, claim risk, and medical codes. Hosted OAuth remote or local stdio.",
   "mcpName": "io.github.tylergibbs1/backwork-mcp",
   "type": "module",
   "bin": {
@@ -18,10 +18,11 @@
     "prepare": "npm run build",
     "contract:check": "npm run build && node scripts/check-openapi-contract.mjs",
     "contract:live": "npm run build && node scripts/check-openapi-contract.mjs --live",
-    "openapi:update": "node scripts/update-openapi.mjs"
+    "openapi:update": "node scripts/update-openapi.mjs",
+    "version": "node scripts/sync-version.mjs && git add server.json src/index.ts"
   },
   "files": [
-    "build"
+    "build/src"
   ],
   "publishConfig": {
     "access": "public"
@@ -41,11 +42,16 @@
   },
   "keywords": [
     "mcp",
+    "mcp-server",
+    "model-context-protocol",
     "healthcare",
+    "prior-authorization",
+    "medical-policy",
+    "payer",
     "medicare",
-    "backwork",
     "coverage",
-    "prior-auth"
+    "medical-codes",
+    "backwork"
   ],
   "repository": {
     "type": "git",
