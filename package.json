@@ -61,5 +61,6 @@
     "url": "https://github.com/tylergibbs1/backwork-mcp/issues"
   },
   "homepage": "https://backworkhealth.com",
-  "license": "MIT"
+  "license": "MIT",
+  "author": "Backwork LLC"
 }
