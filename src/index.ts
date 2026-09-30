@@ -18,6 +18,7 @@ import {
   type OperationId,
   type OperationRequest,
 } from "./api-operations.js";
+import { codeSourceNote, parseCodeSources, type SourcedCode } from "./code-source.js";
 import { extractProvenance, formatProvenance, provenanceSchema } from "./provenance.js";
 import { TOOL_OPERATIONS } from "./tool-operations.js";
 
@@ -422,6 +423,9 @@ async function backworkRequest<Id extends OperationId>(
     });
   }
 
+  if (data && typeof data === "object" && "data" in data) {
+    return { ...data, data: parseCodeSources(operationId, data.data) };
+  }
   return data;
 }
 
@@ -574,9 +578,9 @@ function formatCode(code: any): string {
     const { shown, remaining, total } = truncateList(policies, 8);
     lines.push(`\nRelated Policies: ${total} found (${dispositionCounts(policies)})`);
     lines.push("  Note: policy matches are code-list evidence and may include broader procedure families.");
-    shown.forEach((p: any) => {
+    shown.forEach((p: SourcedCode) => {
       lines.push(`  - ${p.policy_id}: ${cleanText(p.title, 140)}`);
-      lines.push(`    Type: ${p.policy_type || "unknown"}, Disposition: ${p.disposition || "unknown"}`);
+      lines.push(`    Type: ${p.policy_type || "unknown"}, Disposition: ${p.disposition || "unknown"}${codeSourceNote(p.source)}`);
       if (p.jurisdiction) lines.push(`    Jurisdiction: ${p.jurisdiction}`);
       if (p.source_url) lines.push(`    Source: ${p.source_url}`);
     });
@@ -642,8 +646,8 @@ function formatPolicy(policy: any, detailed = false): string {
       Object.entries(policy.codes).forEach(([system, codes]: [string, any]) => {
         const codeList = Array.isArray(codes) ? codes : [];
         lines.push(`\n[${system}] (${codeList.length} codes)`);
-        codeList.slice(0, 8).forEach((c: any) => {
-          lines.push(`  - ${c.code}: ${c.display || "No description"} [${c.disposition}]`);
+        codeList.slice(0, 8).forEach((c: SourcedCode) => {
+          lines.push(`  - ${c.code}: ${c.display || "No description"} [${c.disposition}]${codeSourceNote(c.source)}`);
         });
         if (codeList.length > 8) lines.push(`  ... and ${codeList.length - 8} more codes`);
       });
@@ -677,8 +681,8 @@ function formatPriorAuth(result: any): string {
       if (p.source_url) lines.push(`Source: ${p.source_url}`);
       if (p.codes?.length > 0) {
         lines.push("Codes:");
-        p.codes.slice(0, 5).forEach((c: any) => {
-          lines.push(`  - ${c.code} (${c.code_system}): ${c.disposition}`);
+        p.codes.slice(0, 5).forEach((c: SourcedCode) => {
+          lines.push(`  - ${c.code} (${c.code_system}): ${c.disposition}${codeSourceNote(c.source)}`);
         });
         if (p.codes.length > 5) lines.push(`  ... ${p.codes.length - 5} more codes omitted`);
       }
@@ -925,8 +929,8 @@ function formatBatchLookup(data: any): string {
     const policies = Array.isArray(value.policies) ? value.policies : [];
     if (policies.length) {
       lines.push(`  Policies: ${policies.length} (${dispositionCounts(policies)})`);
-      policies.slice(0, 3).forEach((policy: any) => {
-        lines.push(`    - ${policy.policy_id}: ${cleanText(policy.title, 120)} [${policy.disposition ?? "unknown"}]`);
+      policies.slice(0, 3).forEach((policy: SourcedCode) => {
+        lines.push(`    - ${policy.policy_id}: ${cleanText(policy.title, 120)} [${policy.disposition ?? "unknown"}]${codeSourceNote(policy.source)}`);
       });
       if (policies.length > 3) lines.push(`    ... ${policies.length - 3} more omitted`);
     }
