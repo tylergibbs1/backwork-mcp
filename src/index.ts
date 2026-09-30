@@ -13,10 +13,13 @@ import { z } from "zod";
 
 import {
   BACKWORK_OPERATIONS,
-  isOperationAvailable,
+  operationExposure,
   operationPath,
+  type Exposure,
+  type ExposureContext,
   type OperationId,
   type OperationRequest,
+  type Scope,
 } from "./api-operations.js";
 import { codeSourceNote, parseCodeSources, type SourcedCode } from "./code-source.js";
 import { extractProvenance, formatProvenance, provenanceSchema } from "./provenance.js";
@@ -26,6 +29,7 @@ import { TOOL_OPERATIONS } from "./tool-operations.js";
 const BACKWORK_API_BASE = process.env.BACKWORK_API_BASE || "https://backworkhealth.com/api/v1";
 const requestApiKey = new AsyncLocalStorage<string | undefined>();
 const requestToolName = new AsyncLocalStorage<string | undefined>();
+const requestExposure = new AsyncLocalStorage<ExposureContext>();
 const args = process.argv.slice(2);
 const shouldShowHelp = args.includes("--help") || args.includes("-h");
 const transportMode = (readOption("transport") || process.env.BACKWORK_MCP_TRANSPORT || (args.includes("--http") ? "http" : "stdio")).toLowerCase();
@@ -72,6 +76,8 @@ type HttpAuthMode = "api-key" | "oauth" | "dual";
 type HttpAuthContext = {
   backworkCredential: string;
   authInfo: AuthInfo;
+  /** What the credential may do: a Backwork API key carries its own scopes; an OAuth grant is read-only unless it includes `write`. */
+  access: Scope;
 };
 
 const responseFormatSchema = z
@@ -86,13 +92,8 @@ const backworkToolOutputSchema = {
   provenance: provenanceSchema.optional(),
 };
 
-const mutatingTools = new Set([
-  "prior_auth_research",
-  "compliance_review",
-  "webhook_management",
-]);
-
-const destructiveTools = new Set(["webhook_management"]);
+// Starts a research job, so it is not read-only even though its operations need only `read` scope.
+const jobCreatingTools = new Set(["prior_auth_research"]);
 
 const toolTitles: Record<string, string> = {
   coverage_lookup: "Coverage Lookup",
@@ -138,11 +139,14 @@ class BackworkApiError extends Error {
   }
 }
 
+const exposureReasons: Record<Exclude<Exposure, "offered">, string> = {
+  "unavailable-in-production": "is not available on the production Backwork API yet",
+  "needs-write-access": "needs write access, which this connection's read-only OAuth grant does not include",
+};
+
 class OperationUnavailableError extends Error {
-  constructor(readonly operationId: OperationId) {
-    super(
-      `${BACKWORK_OPERATIONS[operationId].method} ${BACKWORK_OPERATIONS[operationId].path} is not available on the production Backwork API yet.`,
-    );
+  constructor(readonly operationId: OperationId, reason: Exclude<Exposure, "offered">) {
+    super(`${BACKWORK_OPERATIONS[operationId].method} ${BACKWORK_OPERATIONS[operationId].path} ${exposureReasons[reason]}.`);
     this.name = "OperationUnavailableError";
   }
 }
@@ -359,9 +363,10 @@ async function backworkRequest<Id extends OperationId>(
   operationId: Id,
   request: OperationRequest<Id> = {} as OperationRequest<Id>,
 ): Promise<any> {
-  if (!isOperationAvailable(operationId, BACKWORK_API_BASE, exposeUnavailableTools)) {
-    throw new OperationUnavailableError(operationId);
-  }
+  const context = requestExposure.getStore();
+  if (!context) throw new Error(`${operationId} was called outside a registered tool handler`);
+  const exposure = operationExposure(BACKWORK_OPERATIONS[operationId], context);
+  if (exposure !== "offered") throw new OperationUnavailableError(operationId, exposure);
   const operation = BACKWORK_OPERATIONS[operationId];
   const method = operation.method;
   const params: Record<string, unknown> | undefined = request.query;
@@ -742,11 +747,12 @@ function titleizeToolName(name: string): string {
     .join(" ");
 }
 
-function toolAnnotations(name: string): ToolAnnotations {
-  const readOnly = !mutatingTools.has(name);
+function toolAnnotations(name: string, offeredOperations: readonly OperationId[]): ToolAnnotations {
+  const operations = offeredOperations.map((id) => BACKWORK_OPERATIONS[id]);
+  const readOnly = !jobCreatingTools.has(name) && operations.every((operation) => operation.scope === "read");
   return {
     readOnlyHint: readOnly,
-    destructiveHint: destructiveTools.has(name),
+    destructiveHint: operations.some((operation) => operation.method === "DELETE"),
     idempotentHint: readOnly,
     openWorldHint: true,
   };
@@ -838,37 +844,58 @@ function enhanceDescription(name: string, description: string | undefined): stri
   return `${baseDescription}\n\n${responseFormatNote}`;
 }
 
-/** Actions whose operations the production API does not serve. */
-export function unavailableActions(operations: Record<string, readonly OperationId[]>): string[] {
-  return Object.entries(operations)
-    .filter(([, ids]) => ids.some((id) => !isOperationAvailable(id, BACKWORK_API_BASE, exposeUnavailableTools)))
-    .map(([action]) => action);
+type ActionExposure = { offered: string[]; withheld: Map<Exclude<Exposure, "offered">, string[]> };
+
+/** Splits a tool's actions into those it may call and those withheld, grouped by reason. */
+export function actionExposure(operations: Record<string, readonly OperationId[]>, context: ExposureContext): ActionExposure {
+  const result: ActionExposure = { offered: [], withheld: new Map() };
+  for (const [action, ids] of Object.entries(operations)) {
+    const reason = ids.map((id) => operationExposure(BACKWORK_OPERATIONS[id], context)).find((exposure) => exposure !== "offered");
+    if (!reason) result.offered.push(action);
+    else result.withheld.set(reason, [...(result.withheld.get(reason) ?? []), action]);
+  }
+  return result;
 }
 
-function availabilityNote(unavailable: string[]): string {
-  if (unavailable.length === 0) return "";
-  return `\n\nNot available on the production Backwork API yet: ${unavailable.map((action) => `'${action}'`).join(", ")}. Requests for these return an error without calling the API; do not retry them.`;
+const withheldNotes: Record<Exclude<Exposure, "offered">, string> = {
+  "unavailable-in-production": "Not available on the production Backwork API yet",
+  "needs-write-access": "Not offered on this read-only connection (they need write access)",
+};
+
+function exposureNote(withheld: ActionExposure["withheld"]): string {
+  return [...withheld]
+    .map(([reason, actions]) => `\n\n${withheldNotes[reason]}: ${actions.map((action) => `'${action}'`).join(", ")}. Requests for these return an error without calling the API; do not retry them.`)
+    .join("");
 }
 
-function enhanceToolConfig(name: string, config: BackworkToolConfig): BackworkToolConfig {
+/** Narrows an `action` enum to the offered actions so an agent cannot pick a withheld one. */
+function narrowActionInput(inputSchema: BackworkToolInputSchema | undefined, offered: string[]): BackworkToolInputSchema | undefined {
+  const action = inputSchema?.action;
+  if (!(action instanceof z.ZodEnum)) return inputSchema;
+  const narrowed = z.enum(offered as [string, ...string[]]);
+  return { ...inputSchema, action: action.description ? narrowed.describe(action.description) : narrowed };
+}
+
+function enhanceToolConfig(name: string, config: BackworkToolConfig, exposure: ActionExposure): BackworkToolConfig {
   const title = config.title || toolTitles[name] || titleizeToolName(name);
+  const offeredOperations = exposure.offered.flatMap((action) => config.operations[action]);
   return {
     ...config,
     title,
-    description: enhanceDescription(name, config.description) + availabilityNote(unavailableActions(config.operations)),
-    inputSchema: withResponseFormatInput(config.inputSchema),
+    description: enhanceDescription(name, config.description) + exposureNote(exposure.withheld),
+    inputSchema: withResponseFormatInput(narrowActionInput(config.inputSchema, exposure.offered)),
     outputSchema: config.outputSchema || backworkToolOutputSchema,
-    annotations: config.annotations || toolAnnotations(name),
+    annotations: config.annotations || toolAnnotations(name, offeredOperations),
     _meta: config._meta,
   };
 }
 
-function wrapToolHandler(name: string, handler: BackworkToolHandler): BackworkToolHandler {
+function wrapToolHandler(name: string, context: ExposureContext, handler: BackworkToolHandler): BackworkToolHandler {
   return async (args: unknown, extra: unknown) => {
     const { handlerArgs, responseFormat } = splitResponseFormat(args);
 
     try {
-      const result = await requestToolName.run(name, () => handler(handlerArgs, extra));
+      const result = await requestExposure.run(context, () => requestToolName.run(name, () => handler(handlerArgs, extra)));
       return normalizeToolResult(result, responseFormat);
     } catch (error) {
       return errorResult(`Error running ${name}: ${error instanceof Error ? error.message : String(error)}`);
@@ -876,15 +903,16 @@ function wrapToolHandler(name: string, handler: BackworkToolHandler): BackworkTo
   };
 }
 
-function createBackworkToolRegistrar(server: McpServer): RegisterBackworkTool {
+function createBackworkToolRegistrar(server: McpServer, context: ExposureContext): RegisterBackworkTool {
   return (name, config, handler) => {
     // A tool none of whose actions can succeed is hidden rather than offered to
     // an agent that would only collect errors from it.
-    if (unavailableActions(config.operations).length === Object.keys(config.operations).length) return;
+    const exposure = actionExposure(config.operations, context);
+    if (exposure.offered.length === 0) return;
 
     const prefixedName = `backwork_${name}`;
-    const wrappedHandler = wrapToolHandler(name, handler);
-    const { operations: _operations, ...primaryConfig } = enhanceToolConfig(name, config);
+    const wrappedHandler = wrapToolHandler(name, context, handler);
+    const { operations: _operations, ...primaryConfig } = enhanceToolConfig(name, config, exposure);
 
     server.registerTool(prefixedName, primaryConfig, wrappedHandler);
   };
@@ -1587,12 +1615,16 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     "webhook_management",
     {
       operations: TOOL_OPERATIONS.webhook_management,
-      description: "List, create, update, delete, or test webhook endpoints. Use only when the user is explicitly managing webhook configuration.",
+      description:
+        "List, create, update, delete, or test webhook endpoints. Use only when the user is explicitly managing webhook configuration. Backwork delivers one event type, compliance.acknowledged; policy-change webhooks are not sent.",
       inputSchema: {
         action: z.enum(["list", "create", "update", "delete", "test"]),
         id: z.number().int().optional(),
         url: z.string().url().refine((value) => new URL(value).protocol === "https:", "Webhook URL must use HTTPS").optional(),
-        events: z.array(z.string()).optional(),
+        events: z
+          .array(z.enum(["compliance.acknowledged", "*"]))
+          .optional()
+          .describe("Event types to subscribe to. compliance.acknowledged is the only event delivered; '*' subscribes to every event."),
         status: z.enum(["active", "paused"]).optional(),
       },
     },
@@ -1642,12 +1674,16 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
   );
 }
 
-function createBackworkMcpServer(): McpServer {
+function createBackworkMcpServer(access: Scope): McpServer {
   const server = new McpServer({
     name: "backwork",
     version: SERVER_VERSION,
   });
-  const registerTool = createBackworkToolRegistrar(server);
+  const registerTool = createBackworkToolRegistrar(server, {
+    apiBase: BACKWORK_API_BASE,
+    access,
+    exposeUnavailable: exposeUnavailableTools,
+  });
 
   registerWorkflowTools(registerTool);
 
@@ -1785,6 +1821,7 @@ async function validateOAuthAccessToken(token: string, req: IncomingMessage): Pr
   const resource = new URL(mcpResourceUrl(req));
   return {
     backworkCredential: typeof credentialFromClaim === "string" ? credentialFromClaim : token,
+    access: scopes.includes("write") ? "write" : "read",
     authInfo: {
       token,
       clientId: String(tokenInfo.client_id || tokenInfo.azp || tokenInfo.sub || "oauth-client"),
@@ -1807,6 +1844,7 @@ async function resolveHttpAuth(req: IncomingMessage): Promise<HttpAuthContext | 
       return {
         backworkCredential: bearerToken,
         authInfo: authInfoForApiKey(bearerToken),
+        access: "write",
       };
     }
 
@@ -1820,6 +1858,7 @@ async function resolveHttpAuth(req: IncomingMessage): Promise<HttpAuthContext | 
     return {
       backworkCredential: process.env.BACKWORK_API_KEY,
       authInfo: authInfoForApiKey(process.env.BACKWORK_API_KEY, "backwork-env-api-key"),
+      access: "write",
     };
   }
 
@@ -2010,7 +2049,7 @@ export async function handleMcpEndpointRequest(req: IncomingMessage, res: Server
 
   try {
     const body = await readRequestBody(authenticatedReq);
-    const server = createBackworkMcpServer();
+    const server = createBackworkMcpServer(authContext.access);
     await server.connect(transport);
     await requestApiKey.run(authContext.backworkCredential, () => transport.handleRequest(authenticatedReq, res, body));
   } catch (error) {
@@ -2072,7 +2111,8 @@ async function startStdioServer(): Promise<void> {
     process.exit(1);
   }
 
-  const server = createBackworkMcpServer();
+  // The key's own scopes govern what the API allows; the server offers every tool.
+  const server = createBackworkMcpServer("write");
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Backwork MCP Server running on stdio");

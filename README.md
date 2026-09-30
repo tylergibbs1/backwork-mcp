@@ -12,7 +12,9 @@ There are two ways to connect:
 | Auth | OAuth in the browser, no key to copy | `BACKWORK_API_KEY=bwk_live_...` |
 | Use when | Your client supports remote MCP with OAuth | Your client only runs local commands, or you want the server on your machine |
 
-The hosted endpoint only accepts OAuth. Do not send a Backwork API key as a bearer token to `https://backworkhealth.com/mcp`.
+The hosted endpoint only accepts OAuth. Do not send a Backwork API key as a bearer token to `https://backworkhealth.com/mcp`. The OAuth grant is read-only (`backwork:mcp read`), so the hosted server offers only read actions: no webhook management and no compliance acknowledgements. Use local stdio with a write-scoped live key for those.
+
+Calls draw on your organization's request credits, like any other `/api/v1` call. A `bwk_test_` key works only on the sandbox (`https://backworkhealth.com/api/sandbox/v1`), which covers policy search, code lookup, prior-auth check and coverage evaluation; to use it, set `BACKWORK_API_BASE` to that URL.
 
 ## Claude Code
 
@@ -281,12 +283,12 @@ Values are copied from the API response (`source_url`, `effective_date`, `last_v
 
 ### Production availability
 
-The Backwork OpenAPI document marks some operations `x-backwork-availability: unavailable-in-production`. Against the production API (`https://backworkhealth.com`), this server:
+Which actions a server offers depends on two things:
 
-- hides a tool when none of its actions can succeed (currently `coverage_lookup`, `claim_validation`, `prior_auth_research`, and `drug_formulary_research`);
-- names the unavailable actions in the description of a partly available tool (`policy_research`, `compliance_review`), and answers them with an error without calling the API.
+- **Availability.** The Backwork OpenAPI document can mark an operation `x-backwork-availability: unavailable-in-production`. Against the production API (`https://backworkhealth.com`) the server withholds those actions. None is marked today: production serves every `/api/v1` operation these tools call to an organization's live key.
+- **Access.** Operations that need `write` scope (`x-backwork-required-scopes`) are withheld from a read-only OAuth grant. On the hosted server this hides `backwork_webhook_management` and the `acknowledge` and `bulk_acknowledge` actions of `backwork_compliance_review`. A Backwork API key is offered every action, and the API enforces the key's own scopes.
 
-A server pointed at another Backwork deployment with `BACKWORK_API_BASE` offers every tool. Set `BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS=true` to offer every tool against production anyway.
+A tool with no offered action is hidden. A partly offered tool drops the withheld actions from its `action` input and names them in its description. A server pointed at another Backwork deployment with `BACKWORK_API_BASE` ignores availability markers, and `BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS=true` does the same against production. Neither lifts the write-scope rule.
 
 | Primary tool | Purpose |
 | --- | --- |
@@ -296,7 +298,7 @@ A server pointed at another Backwork deployment with `BACKWORK_API_BASE` offers 
 | `backwork_prior_auth_research` | Check Medicare prior authorization, start payer website research, or poll an async research task |
 | `backwork_drug_formulary_research` | Search commercial pharmacy-benefit evidence from CVS Caremark, Express Scripts, and UnitedHealthcare / Optum Rx |
 | `backwork_compliance_review` | Review compliance stats, list unreviewed policy changes, or acknowledge changes |
-| `backwork_webhook_management` | List, create, update, delete, or test webhook endpoints |
+| `backwork_webhook_management` | List, create, update, delete, or test webhook endpoints. Backwork sends one event, `compliance.acknowledged`; policy-change webhooks are not sent. Needs a write-scoped API key |
 | `backwork_system_health` | Check Backwork API health and dependency status |
 
 ### Response Format
@@ -337,11 +339,13 @@ Run the build and MCP metadata smoke test:
 npm test
 ```
 
-The smoke test starts the built stdio server with a dummy key, verifies the 8 workflow tools, checks titles, schemas, annotations, output schemas, `response_format`, and verifies local validation failures are reported with `isError: true`. The `test/` suite covers production availability, provenance, description quality and a lexical tool-selection check (no model calls), and the registry manifest.
+The smoke test starts the built stdio server with a dummy key, verifies the 8 workflow tools, checks titles, schemas, annotations, output schemas, `response_format`, and verifies local validation failures are reported with `isError: true`. The `test/` suite covers production availability, the hosted server's OAuth-only, read-only tool set, provenance, description quality and a lexical tool-selection check (no model calls), and the registry manifest.
 
 ### API contract
 
-Every Backwork endpoint this server calls is listed in `src/api-operations.ts`, with the request fields it sends and the response fields it reads. Tools can only call the API through that catalog. `npm test` checks the catalog against the vendored `openapi/backwork-openapi.json`, and CI runs `npm run contract:live` against `https://backworkhealth.com/openapi.json`. A field the API no longer accepts or returns, or an operation newly marked unavailable, fails CI.
+Every Backwork endpoint this server calls is listed in `src/api-operations.ts`, with the request fields it sends and the response fields it reads. Tools can only call the API through that catalog. Each entry also mirrors the operation's availability marker and required scope. `npm test` checks the catalog against the vendored `openapi/backwork-openapi.json`, and asks the server's own exposure rule which tool actions it would offer on production, for a read-only OAuth grant and for an API key. An action offered for an operation that production does not serve, marks unavailable, or (for the OAuth grant) guards with `write` scope fails.
+
+CI runs `npm run contract:live`, which runs the same checks against `https://backworkhealth.com/openapi.json` and fails when the vendored copy differs from it anywhere except descriptions, summaries and examples.
 
 When the Backwork API changes, refresh the vendored copy and review the diff:
 
@@ -401,7 +405,7 @@ One-time npm setup: on npmjs.com, open `@backwork/mcp` > **Settings** > **Truste
 | `BACKWORK_MCP_OAUTH_INTROSPECTION_TOKEN` | No | Bearer token for introspection when basic auth is not used. |
 | `BACKWORK_MCP_OAUTH_API_KEY_CLAIM` | No | Dot-path claim from introspection response to use as the downstream Backwork credential. If omitted, the OAuth access token is forwarded. |
 | `BACKWORK_MCP_OAUTH_EXPECTED_AUDIENCE` | No | Comma-separated allowed `aud` values when introspection responses include an audience. |
-| `BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS` | No | `true` offers tools and actions the production API marks unavailable. |
+| `BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS` | No | `true` offers tools and actions the production API marks unavailable. Write-scope actions stay hidden from read-only OAuth grants. |
 
 ## Troubleshooting
 

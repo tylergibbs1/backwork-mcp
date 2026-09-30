@@ -7,7 +7,7 @@ import { connect } from "./helpers.mjs";
 
 const ALL_TOOLS = Object.keys(TOOL_OPERATIONS).map((name) => `backwork_${name}`).sort();
 
-describe("against the production API", () => {
+describe("against the production API with a Backwork API key", () => {
   let client;
   let tools;
   before(async () => {
@@ -16,24 +16,19 @@ describe("against the production API", () => {
   });
   after(() => client.close());
 
-  test("hides tools whose every endpoint is unavailable in production", () => {
-    assert.deepEqual(
-      tools.map((tool) => tool.name).sort(),
-      ["backwork_compliance_review", "backwork_policy_research", "backwork_system_health", "backwork_webhook_management"],
-    );
+  test("offers every tool, since production serves every operation the tools call", () => {
+    assert.deepEqual(tools.map((tool) => tool.name).sort(), ALL_TOOLS);
   });
 
-  test("names the unavailable actions of partly available tools", () => {
-    const byName = new Map(tools.map((tool) => [tool.name, tool.description]));
-    assert.match(byName.get("backwork_policy_research"), /Not available on the production Backwork API yet: 'search', 'get', 'criteria', 'changes'\./);
-    assert.match(byName.get("backwork_compliance_review"), /Not available on the production Backwork API yet: 'stats', 'list_unreviewed'\./);
-    assert.doesNotMatch(byName.get("backwork_webhook_management"), /Not available/);
+  test("withholds no action", () => {
+    for (const tool of tools) assert.doesNotMatch(tool.description, /Not available|Not offered/, tool.name);
+    const compliance = tools.find((tool) => tool.name === "backwork_compliance_review");
+    assert.deepEqual(compliance.inputSchema.properties.action.enum, ["stats", "list_unreviewed", "acknowledge", "bulk_acknowledge"]);
   });
 
-  test("an unavailable action fails clearly without calling the API", async () => {
-    const result = await client.callTool({ name: "backwork_policy_research", arguments: { action: "search", query: "oxygen" } });
-    assert.equal(result.isError, true);
-    assert.match(result.content[0].text, /not available on the production Backwork API yet\. This request was not sent\./);
+  test("offers only the webhook event Backwork delivers", () => {
+    const webhooks = tools.find((tool) => tool.name === "backwork_webhook_management");
+    assert.deepEqual(webhooks.inputSchema.properties.events.items.enum, ["compliance.acknowledged", "*"]);
   });
 });
 
