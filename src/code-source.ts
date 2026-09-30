@@ -7,35 +7,40 @@ import type { OperationId } from "./api-operations.js";
  * - inferred_title_match: attached because the policy title names the drug;
  *   the document itself does not list the code.
  */
-export const CODE_SOURCES = ["document", "inferred_title_match"] as const;
-export type CodeSource = (typeof CODE_SOURCES)[number];
+export type CodeSource =
+  | { kind: "document" }
+  | { kind: "inferred_title_match" }
+  | { kind: "unrecognized"; raw: string };
 
-/** A code entry after parsing: `source` is always present. */
-export type SourcedCode = Record<string, unknown> & { source: CodeSource };
-
-export class CodeSourceParseError extends Error {
-  constructor(value: unknown) {
-    super(`Backwork API returned an unrecognized code source ${JSON.stringify(value)}; expected ${CODE_SOURCES.join(" or ")}.`);
-    this.name = "CodeSourceParseError";
-  }
-}
+/**
+ * A code entry after the response boundary: `source` is always a string. It is
+ * the API's own value, or "document" when an older response omitted it, so
+ * JSON output passes an unrecognized value through unchanged.
+ */
+export type SourcedCode = Record<string, unknown> & { source: string };
 
 /** Responses from before the field existed omit it; those codes all came from the document. */
 export function parseCodeSource(value: unknown): CodeSource {
-  if (value === undefined || value === null) return "document";
-  if ((CODE_SOURCES as readonly unknown[]).includes(value)) return value as CodeSource;
-  throw new CodeSourceParseError(value);
+  if (value === undefined || value === null || value === "document") return { kind: "document" };
+  if (value === "inferred_title_match") return { kind: "inferred_title_match" };
+  return { kind: "unrecognized", raw: typeof value === "string" ? value : JSON.stringify(value) };
 }
 
-const INFERRED_NOTE = " — inferred from policy title (not listed in the document)";
+/** The wire value for a parsed source. */
+function codeSourceValue(source: CodeSource): string {
+  return source.kind === "unrecognized" ? source.raw : source.kind;
+}
 
-/** Text to append to a rendered code line. Empty for codes listed in the document. */
-export function codeSourceNote(source: CodeSource): string {
-  switch (source) {
+/** Text to append to a rendered code line. Empty only for codes listed in the document. */
+export function codeSourceNote(value: string): string {
+  const source = parseCodeSource(value);
+  switch (source.kind) {
     case "document":
       return "";
     case "inferred_title_match":
-      return INFERRED_NOTE;
+      return " — inferred from policy title (not listed in the document)";
+    case "unrecognized":
+      return ` — source: ${source.raw} (unrecognized)`;
   }
 }
 
@@ -46,7 +51,7 @@ function isRecord(value: unknown): value is JsonRecord {
 }
 
 function parseEntry(entry: unknown): unknown {
-  return isRecord(entry) ? { ...entry, source: parseCodeSource(entry.source) } : entry;
+  return isRecord(entry) ? { ...entry, source: codeSourceValue(parseCodeSource(entry.source)) } : entry;
 }
 
 function parseEntries(entries: unknown): unknown {
@@ -90,8 +95,7 @@ const PARSERS: Partial<Record<OperationId, (data: unknown) => unknown>> = {
 
 /**
  * Parses the `data` of a successful response so that every code entry the
- * operation returns has a `source`. Throws CodeSourceParseError on a value
- * outside the documented enum.
+ * operation returns has a `source`.
  */
 export function parseCodeSources(operationId: OperationId, data: unknown): unknown {
   const parse = PARSERS[operationId];

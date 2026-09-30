@@ -137,12 +137,13 @@ describe("code source in markdown output", () => {
     ]);
   });
 
-  test("an unrecognized source fails instead of being shown as a document code", async () => {
+  test("an unrecognized source is labelled in markdown and passed through in JSON", async () => {
     unknownSource = true;
     try {
-      const result = await client.callTool({ name: "backwork_prior_auth_research", arguments: { action: "check", procedure_codes: ["J1004"] } });
-      assert.equal(result.isError, true);
-      assert.match(result.content[0].text, /unrecognized code source "guessed"/);
+      const markdown = await call("backwork_prior_auth_research", { action: "check", procedure_codes: ["J1004"] });
+      assert.equal(lineFor(markdown.content[0].text, "J1004"), "  - J1004 (HCPCS): covered — source: guessed (unrecognized)");
+      const json = await call("backwork_prior_auth_research", { action: "check", procedure_codes: ["J1004"], response_format: "json" });
+      assert.equal(json.structuredContent.data.matched_policies[0].codes[0].source, "guessed");
     } finally {
       unknownSource = false;
     }
