@@ -142,6 +142,28 @@ Local stdio, with the key prompted for once and stored by VS Code:
 codex mcp add backwork --env BACKWORK_API_KEY=bwk_live_YOUR_API_KEY -- npx -y @backwork/mcp
 ```
 
+## Use in ChatGPT
+
+ChatGPT connects to the hosted server as a custom MCP connection in developer mode. Three tools return a small card that ChatGPT renders inline above its answer.
+
+1. In ChatGPT, open **Settings → Security and login** and turn on **Developer mode**. Your plan or workspace admin may need to allow it.
+2. Go to [chatgpt.com/plugins](https://chatgpt.com/plugins) and select the **+** button.
+3. Name it `Backwork`, add a short description, and under **Connection** enter `https://backworkhealth.com/mcp`. Choose **OAuth** for authentication.
+4. Select **Create**. ChatGPT opens Backwork's sign-in page; approve the read-only `backwork:mcp read` grant.
+5. Check the discovered tools, then start a new chat, add Backwork from the tools menu, and ask something like *"Is CPT 76942 covered in Texas, and does it need prior auth?"*
+
+After a server update, open the connection at [chatgpt.com/plugins](https://chatgpt.com/plugins) and select **Refresh** so ChatGPT picks up new tool and component metadata.
+
+| Tool | Card | What it shows |
+| --- | --- | --- |
+| `backwork_coverage_lookup` | Coverage result | Each policy that lists the codes: payer (`CMS` for Medicare policies), title and number, effective date, a row per code with its disposition badge and source label, and an **Open policy** link to the source document |
+| `backwork_prior_auth_research` | Prior-auth checklist | The determination and confidence, codes that require prior auth, documentation to gather, known gaps, and numbered citations. A started research task shows as pending until you ask again |
+| `backwork_policy_research` (`action: "compare"`) | Policy comparison | The codes side by side across Medicare contractors (MACs), one column per jurisdiction, with each cell's disposition and policy, and a coverage count per column |
+
+A code that a policy lists only because its title names the drug is labelled **Inferred from policy title**, in the card and in the text. Confirm it against the document before relying on it.
+
+The cards follow ChatGPT's light or dark theme, load nothing from the network (their CSP allows no domains), and open links through the host. They are [MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps) resources (`text/html;profile=mcp-app`), so other MCP Apps hosts can render them too. Clients without UI support ignore the `_meta` keys that link tools to cards and get the same markdown text as before; `structuredContent.widget` carries the card's data.
+
 ## Other MCP Clients
 
 Clients that run local commands can use the stdio config shown for Claude Desktop. Clients that support remote URLs with OAuth can use `https://backworkhealth.com/mcp` directly.
@@ -293,7 +315,7 @@ A tool with no offered action is hidden. A partly offered tool drops the withhel
 | Primary tool | Purpose |
 | --- | --- |
 | `backwork_coverage_lookup` | Look up procedure codes and combine code details, policy evidence, prior authorization, claim risk, jurisdiction comparison, and spending evidence |
-| `backwork_policy_research` | Search policies, fetch one policy, search extracted criteria, review policy changes, or map MAC jurisdictions |
+| `backwork_policy_research` | Search policies, fetch one policy, search extracted criteria, review policy changes, map MAC jurisdictions, or compare how MACs cover the same codes |
 | `backwork_claim_validation` | Validate claim coverage, documentation requirements, denial risk, and optional policy-specific criteria |
 | `backwork_prior_auth_research` | Check Medicare prior authorization, start payer website research, or poll an async research task |
 | `backwork_drug_formulary_research` | Search commercial pharmacy-benefit evidence from CVS Caremark, Express Scripts, and UnitedHealthcare / Optum Rx |
@@ -339,7 +361,7 @@ Run the build and MCP metadata smoke test:
 npm test
 ```
 
-The smoke test starts the built stdio server with a dummy key, verifies the 8 workflow tools, checks titles, schemas, annotations, output schemas, `response_format`, and verifies local validation failures are reported with `isError: true`. The `test/` suite covers production availability, the hosted server's OAuth-only, read-only tool set, provenance, description quality and a lexical tool-selection check (no model calls), and the registry manifest.
+The smoke test starts the built stdio server with a dummy key, verifies the 8 workflow tools, checks titles, schemas, annotations, output schemas, `response_format`, and verifies local validation failures are reported with `isError: true`. The `test/` suite covers production availability, the hosted server's OAuth-only, read-only tool set, provenance, description quality and a lexical tool-selection check (no model calls), the registry manifest, and the ChatGPT cards: their templates in the tool list, the resources and mime type, each card's `structuredContent` against its schema, markdown for clients without UI, and a render of each card page in a stub browser.
 
 ### API contract
 

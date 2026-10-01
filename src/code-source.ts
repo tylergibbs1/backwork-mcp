@@ -44,6 +44,18 @@ export function codeSourceNote(value: string): string {
   }
 }
 
+/** Short label for a code's source, as the UI components show it. */
+export function codeSourceLabel(source: CodeSource): string {
+  switch (source.kind) {
+    case "document":
+      return "Listed in policy";
+    case "inferred_title_match":
+      return "Inferred from policy title";
+    case "unrecognized":
+      return `Source: ${source.raw}`;
+  }
+}
+
 type JsonRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is JsonRecord {
