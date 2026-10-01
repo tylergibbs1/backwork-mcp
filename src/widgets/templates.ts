@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { renderWidget, widgetRuntime } from "./render.js";
@@ -15,9 +17,11 @@ import { COMPONENT_VIEWS, VIEW_SCHEMAS, type ComponentKind } from "./schemas.js"
 
 export const WIDGET_MIME_TYPE = "text/html;profile=mcp-app";
 
+type WidgetUri = `ui://backwork/${string}.html`;
+
 type WidgetDefinition = {
-  /** Versioned: hosts cache by URI, so a breaking change to the HTML needs a new one. */
-  uri: `ui://backwork/${string}.html`;
+  /** Base of the resource URI; the served URI appends a hash of the HTML (see `WIDGETS`). */
+  name: string;
   title: string;
   /** Shown to the model when the component loads, so it does not repeat what the component shows. */
   description: string;
@@ -25,9 +29,9 @@ type WidgetDefinition = {
   invoked: string;
 };
 
-export const WIDGETS: Record<ComponentKind, WidgetDefinition> = {
+const WIDGET_DEFINITIONS: Record<ComponentKind, WidgetDefinition> = {
   coverage_card: {
-    uri: "ui://backwork/coverage-card-v2.html",
+    name: "coverage-card",
     title: "Coverage result card",
     description:
       "Shows each policy that lists the requested codes: payer, policy title and number, effective date, each code's disposition and whether the document lists it or it was inferred from the policy title, and a link to the policy.",
@@ -35,7 +39,7 @@ export const WIDGETS: Record<ComponentKind, WidgetDefinition> = {
     invoked: "Coverage checked",
   },
   prior_auth_checklist: {
-    uri: "ui://backwork/prior-auth-checklist-v2.html",
+    name: "prior-auth-checklist",
     title: "Prior authorization checklist",
     description:
       "Shows the prior-authorization determination, the codes that require it, the documentation to gather, known gaps including codes inferred from a policy title, and citations.",
@@ -43,7 +47,7 @@ export const WIDGETS: Record<ComponentKind, WidgetDefinition> = {
     invoked: "Prior authorization researched",
   },
   policy_research: {
-    uri: "ui://backwork/policy-research-v1.html",
+    name: "policy-research",
     title: "Policy research card",
     description:
       "Shows the policy research result: a comparison table of the codes across Medicare contractors (MACs), a policy search result list, one policy's summary with criteria excerpts and codes, matching coverage criteria, recent policy changes, or the MAC jurisdictions, with links to the policies.",
@@ -119,7 +123,7 @@ export function widgetHtml(kind: ComponentKind): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${WIDGETS[kind].title}</title>
+<title>${WIDGET_DEFINITIONS[kind].title}</title>
 <style>${STYLES}</style>
 </head>
 <body>
@@ -128,6 +132,19 @@ export function widgetHtml(kind: ComponentKind): string {
 </body>
 </html>`;
 }
+
+/**
+ * Hosts cache a component by URI, so each URI ends in a hash of the HTML it
+ * serves: any change to the markup, styles or renderer ships under a new URI.
+ */
+export const WIDGETS = Object.fromEntries(
+  (Object.keys(WIDGET_DEFINITIONS) as ComponentKind[]).map((kind) => {
+    const definition = WIDGET_DEFINITIONS[kind];
+    const hash = createHash("sha256").update(widgetHtml(kind)).digest("hex").slice(0, 12);
+    const uri: WidgetUri = `ui://backwork/${definition.name}-${hash}.html`;
+    return [kind, { ...definition, uri }];
+  }),
+) as Record<ComponentKind, WidgetDefinition & { uri: WidgetUri }>;
 
 /** Resource `_meta`: the components load nothing from the network, so every CSP allowlist is empty. */
 function resourceMeta(kind: ComponentKind): Record<string, unknown> {
