@@ -27,11 +27,13 @@ test("every catalogued operation is used by a tool, and every tool action uses c
 });
 
 test("a request field the API does not accept is drift", () => {
-  // The prior-auth check used to send payer and diagnosis_codes, which the API ignores.
-  const catalog = withOperation("checkPriorAuth", { body: ["procedure_codes", "state", "payer", "diagnosis_codes"] });
+  // The prior-auth check accepts payer, but the API would silently ignore diagnosis_codes and plan_type.
+  const catalog = withOperation("checkPriorAuth", {
+    body: ["procedure_codes", "state", "payer", "diagnosis_codes", "plan_type"],
+  });
   assert.deepEqual(checkContract(spec, catalog), [
-    'checkPriorAuth (POST /prior-auth/check): body field "payer" is not accepted',
     'checkPriorAuth (POST /prior-auth/check): body field "diagnosis_codes" is not accepted',
+    'checkPriorAuth (POST /prior-auth/check): body field "plan_type" is not accepted',
   ]);
 });
 
