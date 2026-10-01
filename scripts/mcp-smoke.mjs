@@ -46,7 +46,7 @@ try {
     assert.equal(typeof primary.annotations?.readOnlyHint, "boolean", `${primaryName} should set readOnlyHint`);
     assert.equal(typeof primary.annotations?.destructiveHint, "boolean", `${primaryName} should set destructiveHint`);
     assert.equal(typeof primary.annotations?.idempotentHint, "boolean", `${primaryName} should set idempotentHint`);
-    assert.equal(primary.annotations?.openWorldHint, true, `${primaryName} should mark external API access`);
+    assert.equal(typeof primary.annotations?.openWorldHint, "boolean", `${primaryName} should set openWorldHint`);
   }
 
   assert.equal(byName.get("backwork_policy_research")?.annotations?.readOnlyHint, true);

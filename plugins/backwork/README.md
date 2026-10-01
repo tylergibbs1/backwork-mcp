@@ -37,7 +37,7 @@ New Backwork accounts start with 100 free credits. Each tool call uses your orga
 | `prior-auth-research` | `/backwork:pa` or `/backwork:prior-auth-research` | Checks whether a payer requires prior authorization for CPT/HCPCS codes. Lists the documentation criteria with citations, flags inferred codes and gaps, and gives a submission checklist. |
 | `coverage-check` | `/backwork:coverage` or `/backwork:coverage-check` | Answers "is code X covered by payer Y" with the policy disposition, conditions, and citation. |
 | `policy-change-review` | `/backwork:policy-change-review` | Summarizes recent policy changes for a payer or code, and says what to update for each change. |
-| `claim-denial-appeal-prep` | `/backwork:claim-denial-appeal-prep` | Finds the policy that governed the date of service for denied codes. Drafts an appeal-letter outline that quotes only criteria Backwork returned. |
+| `claim-denial-appeal-prep` | `/backwork:claim-denial-appeal-prep` | Finds the policy version in effect on the policy as-of date for denied codes. Drafts an appeal-letter outline that quotes only criteria Backwork returned. |
 
 You can also ask in plain language. Claude picks the skill from your question. Examples:
 

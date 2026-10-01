@@ -8,7 +8,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
-import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import {
@@ -21,10 +21,12 @@ import {
   type OperationRequest,
   type Scope,
 } from "./api-operations.js";
+import { BackworkApiError, formatApiFailure, parseApiFailure } from "./api-errors.js";
 import { codeSourceNote, parseCodeSources, type SourcedCode } from "./code-source.js";
+import { limitCodeDetailsToPayer, otherPayersNote, resolveRequestedPayer } from "./payer-scope.js";
 import { extractProvenance, formatProvenance, provenanceSchema } from "./provenance.js";
+import { projectEnvelope } from "./projection.js";
 import { TOOL_OPERATIONS } from "./tool-operations.js";
-import { minimizeEnvelope } from "./trace-fields.js";
 import type { WidgetKind, WidgetView } from "./widgets/schemas.js";
 import { registerWidgetResources, widgetOutputSchema, widgetToolMeta } from "./widgets/templates.js";
 import { buildCoverageCard, buildPolicyComparison, buildPriorAuthChecklist, buildResearchChecklist } from "./widgets/views.js";
@@ -63,14 +65,26 @@ const exposeUnavailableTools = process.env.BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS
 
 type AuthenticatedIncomingMessage = IncomingMessage & { auth?: AuthInfo };
 type BackworkToolInputSchema = z.ZodRawShape;
+/**
+ * MCP tool hints, stated per tool. Every hint is required so none falls back to
+ * a default that does not match the tool; the registrar checks them against the
+ * scopes and methods of the operations the tool calls.
+ */
+type ToolHints = {
+  readonly readOnlyHint: boolean;
+  readonly destructiveHint: boolean;
+  readonly idempotentHint: boolean;
+  /** true when the tool reaches beyond Backwork's own catalog and org data, e.g. by searching public websites. */
+  readonly openWorldHint: boolean;
+};
 type BackworkToolConfig = {
   /** The API operations each action (or evidence module) calls; drives production availability. */
   operations: Record<string, readonly OperationId[]>;
   title?: string;
-  description?: string;
+  description: string;
   inputSchema?: BackworkToolInputSchema;
   outputSchema?: BackworkToolInputSchema;
-  annotations?: ToolAnnotations;
+  annotations: ToolHints;
   _meta?: Record<string, unknown>;
   /** The UI component that renders this tool's `structuredContent.widget` in MCP Apps hosts such as ChatGPT. */
   widget?: WidgetKind;
@@ -98,9 +112,6 @@ const backworkToolOutputSchema = {
   provenance: provenanceSchema.optional(),
 };
 
-// Starts a research job, so it is not read-only even though its operations need only `read` scope.
-const jobCreatingTools = new Set(["prior_auth_research"]);
-
 const toolTitles: Record<string, string> = {
   coverage_lookup: "Coverage Lookup",
   policy_research: "Policy Research",
@@ -113,34 +124,6 @@ const toolTitles: Record<string, string> = {
 };
 
 const includeSchema = z.union([z.string(), z.array(z.string())]).optional();
-
-class BackworkApiError extends Error {
-  status: number;
-  code?: string;
-  hint?: string;
-  details?: unknown;
-  upgradeTo?: string;
-  requiredPlan?: string;
-
-  constructor(params: {
-    status: number;
-    message: string;
-    code?: string;
-    hint?: string;
-    details?: unknown;
-    upgradeTo?: string;
-    requiredPlan?: string;
-  }) {
-    super(params.message);
-    this.name = "BackworkApiError";
-    this.status = params.status;
-    this.code = params.code;
-    this.hint = params.hint;
-    this.details = params.details;
-    this.upgradeTo = params.upgradeTo;
-    this.requiredPlan = params.requiredPlan;
-  }
-}
 
 const exposureReasons: Record<Exclude<Exposure, "offered">, string> = {
   "unavailable-in-production": "is not available on the production Backwork API yet",
@@ -357,11 +340,13 @@ function buildProtectedResourceMetadata(req: IncomingMessage): Record<string, un
 
 /**
  * The only way tools reach the Backwork API. The request type comes from the
- * operation catalog, so a tool can send only fields the catalog declares, and
- * the catalog is checked against the published OpenAPI document in CI.
+ * operation catalog, so a tool can send only fields the catalog declares; the
+ * response is projected to the catalog's `reads` and `metaReads`, so a tool
+ * sees only listed fields. The catalog is checked against the published
+ * OpenAPI document in CI.
  */
-// The response envelope is typed `any` as before; the catalog's `reads` list,
-// checked against the OpenAPI document, is what pins the fields tools use.
+// The projected envelope is typed `any`; the catalog's read lists, checked
+// against the OpenAPI document, pin the fields it can hold.
 async function backworkRequest<Id extends OperationId>(
   operationId: Id,
   request: OperationRequest<Id> = {} as OperationRequest<Id>,
@@ -425,21 +410,11 @@ async function backworkRequest<Id extends OperationId>(
         data.meta?.request_id ? ` request_id=${data.meta.request_id}` : ""
       }`,
     );
-    throw new BackworkApiError({
-      status: response.status,
-      code: data.error?.code,
-      message: data.error?.message || `API error: ${response.status}`,
-      hint: data.error?.hint,
-      details: data.error?.details,
-      upgradeTo: data.error?.upgrade_to,
-      requiredPlan: data.error?.required_plan,
-    });
+    throw new BackworkApiError(response.status, parseApiFailure(response.status, data, response.headers.get("retry-after")));
   }
 
-  if (data && typeof data === "object" && "data" in data) {
-    return minimizeEnvelope(operationId, { ...data, data: parseCodeSources(operationId, data.data) });
-  }
-  return data;
+  const projected = projectEnvelope(operationId, data, context.access);
+  return { ...projected, data: parseCodeSources(operationId, projected.data) };
 }
 
 // Format helpers for clean output
@@ -514,52 +489,14 @@ function formatToolError(action: string, error: unknown): string {
   if (error instanceof OperationUnavailableError) {
     return `Cannot ${action}: ${error.message} This request was not sent. Use an action this tool lists as available.`;
   }
-  if (error instanceof BackworkApiError && error.code === "COMMERCIAL_SURFACE_UNAVAILABLE") {
-    return [
-      `Cannot ${action}: the Backwork API reports this endpoint is not available in production yet.`,
-      "Do not retry. Use an available action or tell the user this data is not available.",
-    ].join("\n");
-  }
-  if (error instanceof BackworkApiError) {
-    const details = error.details && typeof error.details === "object" ? (error.details as Record<string, unknown>) : {};
-    const requiredScopes = asArray(details.required_scopes).map(String);
-    const requiredPlan = details.required_plan || details.required_feature || error.requiredPlan || error.upgradeTo;
-
-    if (
-      error.status === 403 ||
-      error.code === "AUTHZ_SCOPE_REQUIRED" ||
-      error.code === "AUTH_SCOPE_INSUFFICIENT" ||
-      requiredPlan
-    ) {
-      const requirements = [
-        requiredScopes.length ? `scope ${requiredScopes.map((scope) => `"${scope}"`).join(" or ")}` : null,
-        requiredPlan ? `plan/feature "${requiredPlan}"` : null,
-      ].filter(Boolean);
-      return [
-        `Cannot ${action}: this API key is authenticated but is not authorized for that operation.`,
-        requirements.length ? `Required: ${requirements.join("; ")}.` : "Required: a higher-scope key or plan entitlement.",
-        "Use a key with the required scope/plan, upgrade the organization, or choose a read-only tool for this workflow.",
-      ].filter(Boolean).join("\n");
-    }
-
-    if (error.status === 401) {
-      return `Cannot ${action}: the API key was missing, invalid, revoked, or suspended.`;
-    }
-
-    return [
-      `Error ${action}: ${error.message}`,
-      error.hint ? `Hint: ${error.hint}` : null,
-      error.code ? `Code: ${error.code}` : null,
-    ].filter(Boolean).join("\n");
-  }
-
+  if (error instanceof BackworkApiError) return formatApiFailure(action, error.failure);
   return `Error ${action}: ${error instanceof Error ? error.message : String(error)}`;
 }
 
 function formatCode(code: any): string {
   const lines: string[] = [];
   lines.push(`Code: ${code.code} (${code.code_system})`);
-  const description = code.description || code.long_description || code.short_description || code.display || code.name;
+  const description = code.description || code.short_description;
   lines.push(
     `Description: ${
       description
@@ -615,6 +552,7 @@ function formatPolicy(policy: any, detailed = false): string {
   if (policy.jurisdiction) lines.push(`Jurisdiction: ${policy.jurisdiction}`);
   if (policy.effective_date) lines.push(`Effective: ${policy.effective_date}`);
   if (policy.retire_date) lines.push(`Retired: ${policy.retire_date}`);
+  if (policy.last_reviewed_date) lines.push(`Last reviewed: ${policy.last_reviewed_date}`);
   if (policy.source_url) lines.push(`Source: ${policy.source_url}`);
 
   if (detailed) {
@@ -759,15 +697,21 @@ function titleizeToolName(name: string): string {
     .join(" ");
 }
 
-function toolAnnotations(name: string, offeredOperations: readonly OperationId[]): ToolAnnotations {
+/**
+ * The tool's own hints, refused at registration when they understate what its
+ * offered operations do: a read-only tool cannot call a write-scope operation,
+ * and a non-destructive tool cannot call a DELETE.
+ */
+function toolAnnotations(name: string, hints: ToolHints, offeredOperations: readonly OperationId[]): ToolHints {
   const operations = offeredOperations.map((id) => BACKWORK_OPERATIONS[id]);
-  const readOnly = !jobCreatingTools.has(name) && operations.every((operation) => operation.scope === "read");
-  return {
-    readOnlyHint: readOnly,
-    destructiveHint: operations.some((operation) => operation.method === "DELETE"),
-    idempotentHint: readOnly,
-    openWorldHint: true,
-  };
+  if (hints.readOnlyHint && operations.some((operation) => operation.scope === "write")) {
+    throw new Error(`backwork_${name} is marked read-only but offers a write-scope operation`);
+  }
+  if (!hints.destructiveHint && operations.some((operation) => operation.method === "DELETE")) {
+    throw new Error(`backwork_${name} is marked non-destructive but offers a DELETE operation`);
+  }
+  if (hints.readOnlyHint && hints.destructiveHint) throw new Error(`backwork_${name} cannot be both read-only and destructive`);
+  return { ...hints };
 }
 
 function withResponseFormatInput(inputSchema: BackworkToolInputSchema = {}): BackworkToolInputSchema {
@@ -851,11 +795,10 @@ function toolError(message: string): CallToolResult {
   return errorResult(`Error: ${message}`);
 }
 
-function enhanceDescription(name: string, description: string | undefined): string {
-  const baseDescription = description || `${titleizeToolName(name)} in the Backwork API.`;
+function enhanceDescription(description: string): string {
   const responseFormatNote =
     "Supports optional response_format: 'markdown' (default) for readable text or 'json' for the returned structuredContent object.";
-  return `${baseDescription}\n\n${responseFormatNote}`;
+  return `${description}\n\n${responseFormatNote}`;
 }
 
 type ActionExposure = { offered: string[]; withheld: Map<Exclude<Exposure, "offered">, string[]> };
@@ -871,15 +814,15 @@ export function actionExposure(operations: Record<string, readonly OperationId[]
   return result;
 }
 
-const withheldNotes: Record<Exclude<Exposure, "offered">, string> = {
-  "unavailable-in-production": "Not available on the production Backwork API yet",
-  "needs-write-access": "Not offered on this read-only connection (they need write access)",
-};
-
+/**
+ * Names the actions withheld because production does not serve them yet.
+ * Actions withheld for lack of write access are left out of the enum without a
+ * note: a read-only connection's tool list does not describe what it cannot do.
+ */
 function exposureNote(withheld: ActionExposure["withheld"]): string {
-  return [...withheld]
-    .map(([reason, actions]) => `\n\n${withheldNotes[reason]}: ${actions.map((action) => `'${action}'`).join(", ")}. Requests for these return an error without calling the API; do not retry them.`)
-    .join("");
+  const unavailable = withheld.get("unavailable-in-production");
+  if (!unavailable?.length) return "";
+  return `\n\nNot available on the production Backwork API yet: ${unavailable.map((action) => `'${action}'`).join(", ")}. Requests for these return an error without calling the API; do not retry them.`;
 }
 
 /** Narrows an `action` enum to the offered actions so an agent cannot pick a withheld one. */
@@ -898,10 +841,10 @@ function enhanceToolConfig(name: string, config: BackworkToolConfig, exposure: A
   return {
     ...rest,
     title,
-    description: enhanceDescription(name, config.description) + exposureNote(exposure.withheld),
+    description: enhanceDescription(config.description) + exposureNote(exposure.withheld),
     inputSchema: withResponseFormatInput(narrowActionInput(config.inputSchema, exposure.offered)),
     outputSchema: widget ? { ...outputSchema, widget: widgetOutputSchema(widget) } : outputSchema,
-    annotations: config.annotations || toolAnnotations(name, offeredOperations),
+    annotations: toolAnnotations(name, config.annotations, offeredOperations),
     _meta: widget ? { ...config._meta, ...widgetToolMeta(widget) } : config._meta,
   };
 }
@@ -949,7 +892,7 @@ function formatBatchLookup(data: any): string {
       continue;
     }
 
-    const description = value.description || value.long_description || value.short_description || value.display;
+    const description = value.description || value.short_description;
     lines.push(`\n${value.code ?? requestedCode} (${value.code_system ?? "unknown"})`);
     lines.push(
       `  Description: ${
@@ -1096,10 +1039,10 @@ function formatDrugFormulary(data: any, query: string, meta?: any): string {
   }
 
   results.slice(0, 10).forEach((record: any, index: number) => {
-    const payer = record.payer || record.source || record.source_name || record.reporting_entity || "unknown payer";
-    const drug = record.drug_name || record.name || record.brand_name || record.generic_name || record.ndc || "unknown drug";
-    const tier = record.tier ?? record.formulary_tier;
-    const status = record.coverage_status ?? record.status ?? record.covered;
+    const payer = record.payer_name || record.source || "unknown payer";
+    const drug = record.drug_name || "unknown drug";
+    const tier = record.tier;
+    const status = record.coverage_status;
     const requirements = record.requirements && typeof record.requirements === "object" ? record.requirements : {};
     const utilization = [
       isTruthyRequirement(record.prior_authorization ?? record.priorAuth ?? requirements.prior_authorization) ? "PA" : null,
@@ -1150,7 +1093,6 @@ function formatWebhookList(data: any): string {
     lines.push(`\n${endpoint.id}: ${endpoint.url}`);
     lines.push(`  Status: ${endpoint.status ?? "unknown"} | Events: ${(endpoint.events ?? []).join(", ") || "none"}`);
     if (endpoint.failure_count !== undefined) lines.push(`  Failure count: ${endpoint.failure_count}`);
-    if (endpoint.created_at) lines.push(`  Created: ${endpoint.created_at}`);
   });
   if (endpoints.length > 20) lines.push(`\nShowing 20 of ${endpoints.length} endpoints.`);
   return lines.join("\n");
@@ -1240,11 +1182,11 @@ function formatPolicyComparison(data: any): string {
 
 function formatResearch(result: any): string {
   const lines: string[] = [];
+  lines.push(`Research status: ${result.status}`);
   lines.push(`Research ID: ${result.research_id}`);
-  lines.push(`Status: ${result.status}`);
-  if (result.created_at) lines.push(`Created: ${result.created_at}`);
-  if (result.finished_at) lines.push(`Finished: ${result.finished_at}`);
-  if (result.poll_url) lines.push(`Poll URL: ${result.poll_url}`);
+  if (result.status === "pending" || result.status === "running") {
+    lines.push("Payer-website research usually takes a few minutes. To check on it, call this tool with action='get_research' and this research ID.");
+  }
 
   if (result.result?.determination) {
     const determination = result.result.determination;
@@ -1263,12 +1205,24 @@ function formatResearch(result: any): string {
   return lines.join("\n");
 }
 
-function registerWorkflowTools(registerTool: RegisterBackworkTool): void {
+/** Reads Backwork's own policy catalog or the organization's data; repeating a call changes nothing. */
+const CATALOG_READ: ToolHints = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+
+const POLICY_AS_OF_DATE = "Policy as-of date, YYYY-MM-DD: the date whose policy version applies.";
+
+/**
+ * Registers the workflow tools for a connection. `access` is what the
+ * credential may do: a hosted OAuth grant is `read`, a Backwork API key
+ * `write`. A read connection gets no write-only inputs, no diagnostics tool,
+ * and descriptions that name only what it can do.
+ */
+function registerWorkflowTools(registerTool: RegisterBackworkTool, access: Scope): void {
   registerTool(
     "coverage_lookup",
     {
       operations: TOOL_OPERATIONS.coverage_lookup,
       widget: "coverage_card",
+      annotations: CATALOG_READ,
       description: `Answer common coverage questions for procedure codes in one workflow.
 Use this when a user asks whether codes are covered, whether prior authorization is required, what policies support the answer, or how coverage differs by jurisdiction.
 This tool can combine code lookup, related policy evidence, prior-auth checks (traditional Medicare, or the named payer's own policies when payer is given), claim-risk validation, jurisdiction comparison, and spending evidence so the agent does not need to chain endpoint-shaped tools.`,
@@ -1289,9 +1243,9 @@ This tool can combine code lookup, related policy evidence, prior-auth checks (t
           .string()
           .max(80)
           .optional()
-          .describe("Payer name, slug or code, e.g. 'Moda Health'. The prior-auth check answers from this payer's policies; omit it for traditional Medicare."),
+          .describe("Payer name, slug or code, e.g. 'Moda Health'. The prior-auth check answers from this payer's policies, and code details list only this payer's policies. Omit it for traditional Medicare."),
         plan_type: z.enum(["commercial", "medicare_advantage", "medicaid", "traditional_medicare", "exchange"]).optional(),
-        date_of_service: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Date of service in YYYY-MM-DD format"),
+        date_of_service: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe(`${POLICY_AS_OF_DATE} Used by the claim_risk module.`),
         site_of_service: z.enum(["office", "outpatient_hospital", "asc", "inpatient", "home", "telehealth"]).optional(),
         compare_jurisdictions: z.array(z.string()).max(10).optional().describe("Jurisdictions to compare for regional coverage variation"),
         include: z
@@ -1314,6 +1268,7 @@ This tool can combine code lookup, related policy evidence, prior-auth checks (t
         const lines = [`Coverage Lookup for ${procedure_codes.join(", ")}`];
         const normalizedCodeInclude = normalizeInclude(code_include, "rvu,policies");
 
+        let codeDetails: unknown;
         if (requested.has("code_details")) {
           const result =
             procedure_codes.length === 1
@@ -1333,18 +1288,36 @@ This tool can combine code lookup, related policy evidence, prior-auth checks (t
                     include: normalizedCodeInclude,
                   },
                 });
-          data.code_details = result.data;
-          lines.push("\n--- Code Details ---");
-          lines.push(procedure_codes.length === 1 ? formatCode(result.data) : formatBatchLookup(result.data));
+          codeDetails = result.data;
         }
 
+        let priorAuth: unknown;
         if (requested.has("prior_auth")) {
           const result = await backworkRequest("checkPriorAuth", {
             body: { procedure_codes, state, payer },
           });
-          data.prior_auth = result.data;
+          priorAuth = result.data;
+        }
+
+        if (requested.has("code_details")) {
+          // Code lookup cannot filter by payer, so a named payer's answer drops other payers' policy matches here.
+          let note: string | null = null;
+          if (payer) {
+            const scoped = limitCodeDetailsToPayer(codeDetails, resolveRequestedPayer(payer, priorAuth));
+            codeDetails = scoped.codeDetails;
+            data.other_payers = scoped.others;
+            note = otherPayersNote(payer, procedure_codes, scoped.others);
+          }
+          data.code_details = codeDetails;
+          lines.push("\n--- Code Details ---");
+          lines.push(procedure_codes.length === 1 ? formatCode(codeDetails) : formatBatchLookup(codeDetails));
+          if (note) lines.push(note);
+        }
+
+        if (requested.has("prior_auth")) {
+          data.prior_auth = priorAuth;
           lines.push("\n--- Prior Authorization ---");
-          lines.push(formatPriorAuth(result.data));
+          lines.push(formatPriorAuth(priorAuth));
         }
 
         if (requested.has("claim_risk")) {
@@ -1404,6 +1377,7 @@ This tool can combine code lookup, related policy evidence, prior-auth checks (t
     {
       operations: TOOL_OPERATIONS.policy_research,
       widget: "policy_comparison",
+      annotations: CATALOG_READ,
       description: `Research coverage policies and criteria.
 Use this for policy search, fetching one policy by ID, searching extracted criteria, reviewing policy changes, mapping state to MAC jurisdiction, or comparing how Medicare contractors (MACs) cover the same procedure codes side by side. This replaces several endpoint-shaped policy tools with one research workflow.`,
       inputSchema: {
@@ -1510,28 +1484,36 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     },
   );
 
+  const claimValidationInput = {
+    procedure_codes: z.array(z.string()).min(1).max(10).describe("CPT/HCPCS procedure codes, up to 10"),
+    diagnosis_codes: z.array(z.string()).max(20).optional().describe("ICD-10-CM diagnosis codes"),
+    payer: z.string().optional().describe("Payer name, slug or code, e.g. 'Aetna'. Omit for traditional Medicare."),
+    plan_type: z.enum(["commercial", "medicare_advantage", "medicaid", "traditional_medicare", "exchange"]).optional(),
+    line_of_business: z.string().optional(),
+    modifiers: z.array(z.string()).max(5).optional(),
+    state: z.string().length(2).optional().describe("Two-letter state used to infer the Medicare jurisdiction, e.g. TX"),
+    date_of_service: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe(POLICY_AS_OF_DATE),
+    site_of_service: z.enum(["office", "outpatient_hospital", "asc", "inpatient", "home", "telehealth"]).optional(),
+    provider_specialty: z.string().optional(),
+    age_category: z.enum(["pediatric", "adult", "medicare_age"]).optional(),
+    sex_when_policy_relevant: z.enum(["female", "male", "other", "unknown"]).optional(),
+    policy_id: z.string().optional().describe("Optional policy ID to evaluate against structured parameters"),
+    coverage_parameters: z.record(z.unknown()).optional().describe("Policy criteria inputs when policy_id is supplied"),
+  };
   registerTool(
     "claim_validation",
     {
       operations: TOOL_OPERATIONS.claim_validation,
-      description: "Validate claim coverage, documentation requirements, denial risk, and optional policy-specific criteria in one workflow.",
-      inputSchema: {
-        procedure_codes: z.array(z.string()).min(1).max(10).describe("CPT/HCPCS procedure codes"),
-        diagnosis_codes: z.array(z.string()).max(20).optional(),
-        payer: z.string().optional().describe("Payer or policy source label"),
-        plan_type: z.enum(["commercial", "medicare_advantage", "medicaid", "traditional_medicare", "exchange"]).optional(),
-        line_of_business: z.string().optional(),
-        modifiers: z.array(z.string()).max(5).optional(),
-        state: z.string().length(2).optional(),
-        date_of_service: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-        site_of_service: z.enum(["office", "outpatient_hospital", "asc", "inpatient", "home", "telehealth"]).optional(),
-        provider_specialty: z.string().optional(),
-        age_category: z.enum(["pediatric", "adult", "medicare_age"]).optional(),
-        sex_when_policy_relevant: z.enum(["female", "male", "other", "unknown"]).optional(),
-        policy_id: z.string().optional().describe("Optional policy ID to evaluate against structured parameters"),
-        coverage_parameters: z.record(z.unknown()).optional().describe("Policy criteria inputs when policy_id is supplied"),
-        idempotency_key: z.string().optional(),
-      },
+      annotations: CATALOG_READ,
+      description: `Validate a claim before submission: estimate denial risk and show coverage status, prior-auth need, documentation requirements and the policies behind them.
+Use it when a user asks whether a claim for given procedure and diagnosis codes is likely to be denied, or what documentation the payer will expect. To test one policy's structured criteria as well, pass policy_id with coverage_parameters.
+Limits: answers come only from the policies Backwork indexes (Medicare NCDs, LCDs and Articles, and the commercial payer policies in its catalog). It does not submit or look up a real claim and has no claim history; when no policy matches it reports the result as unknown. Up to 10 procedure codes.
+Side effects: none. It is read-only. Send codes and plan context only, never patient identifiers.`,
+      // A read connection gets no idempotency key: the call is read-only, so a retry is already safe.
+      inputSchema:
+        access === "write"
+          ? { ...claimValidationInput, idempotency_key: z.string().optional().describe("Optional key that makes the API return the cached result of an earlier identical call") }
+          : claimValidationInput,
     },
     async ({ idempotency_key, policy_id, coverage_parameters, ...body }) => {
       try {
@@ -1565,15 +1547,22 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     {
       operations: TOOL_OPERATIONS.prior_auth_research,
       widget: "prior_auth_checklist",
-      description: "Check, start, or poll payer prior-authorization research without exposing separate task-management tools.",
+      // start_research queues a job that searches public payer websites, and each call starts a new one.
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      description: `Check whether procedure codes need prior authorization, or start and poll payer website research on a payer's prior-authorization rules.
+Use action='check' first. It answers at once from Backwork's policy catalog: traditional Medicare NCDs and LCDs, or the named payer's own policies when payer is given. It returns documentation requirements and citations. When no policy matches, the answer is unknown, not "not required".
+Use action='start_research' when check finds no evidence for a commercial payer. It queues a background job that searches public payer websites; it does not contact the payer or submit a request. Results can take a few minutes, then poll with action='get_research' and the returned research_id. Each start_research call starts a new job, so poll instead of starting again.
+Limits: CPT/HCPCS codes, up to 10 per call. Results are evidence to confirm with the payer, not an authorization decision. Send no patient identifiers.`,
       inputSchema: {
-        action: z.enum(["check", "start_research", "get_research"]).describe("Use check for immediate PA evidence (traditional Medicare, or the payer's own policies when payer is given), start_research for payer website research, get_research to poll a research_id"),
-        procedure_codes: z.array(z.string()).min(1).max(10).optional(),
-        research_id: z.string().optional(),
-        payer: z.string().optional(),
-        state: z.string().length(2).optional(),
-        diagnosis_codes: z.array(z.string()).max(20).optional(),
-        sync: z.boolean().default(false),
+        action: z
+          .enum(["check", "start_research", "get_research"])
+          .describe("check: immediate answer from Backwork's policies. start_research: queue payer website research. get_research: poll a research_id."),
+        procedure_codes: z.array(z.string()).min(1).max(10).optional().describe("CPT/HCPCS codes; required for check and start_research"),
+        research_id: z.string().optional().describe("The research ID start_research returned; required for get_research"),
+        payer: z.string().optional().describe("Payer name, slug or code, e.g. 'Moda Health'. Omit for traditional Medicare."),
+        state: z.string().length(2).optional().describe("Two-letter state, e.g. OR"),
+        diagnosis_codes: z.array(z.string()).max(20).optional().describe("ICD-10-CM codes; start_research only"),
+        sync: z.boolean().default(false).describe("start_research only: wait for the research to finish instead of returning a research_id to poll"),
       },
     },
     async ({ action, procedure_codes, research_id, ...body }) => {
@@ -1607,10 +1596,14 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     "drug_formulary_research",
     {
       operations: TOOL_OPERATIONS.drug_formulary_research,
-      description: "Search commercial pharmacy-benefit evidence from CVS Caremark, Express Scripts, and UnitedHealthcare / Optum Rx.",
+      annotations: CATALOG_READ,
+      description: `Search commercial pharmacy-benefit drug formulary evidence: tier, coverage status, prior authorization, step therapy and quantity limits for a drug.
+Use it when a user asks how a pharmacy benefit manager covers a drug. It searches only the published formularies Backwork collects from CVS Caremark, Express Scripts and UnitedHealthcare / Optum Rx.
+Limits: no Medicare Part D, Medicaid or other payers, and no drugs billed under the medical benefit (use coverage_lookup with the HCPCS J-code for those). A result shows what a formulary document says, not a member's plan. If a query finds nothing, it retries once with a simpler drug name and says so.
+Side effects: none. It is read-only.`,
       inputSchema: {
-        query: z.string().min(2).max(200).describe("Drug, class, or formulary requirement to search for"),
-        payer: z.enum(["all", "cvs_caremark", "express_scripts", "uhc"]).default("all"),
+        query: z.string().min(2).max(200).describe("Drug, class, or formulary requirement to search for, e.g. 'Ozempic'"),
+        payer: z.enum(["all", "cvs_caremark", "express_scripts", "uhc"]).default("all").describe("Formulary source to search"),
         limit: z.number().int().min(1).max(50).default(10),
       },
     },
@@ -1649,21 +1642,35 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     },
   );
 
+  const complianceReadInput = {
+    change_type: z.string().optional().describe("Filter unreviewed changes by change type"),
+    cursor: z.string().optional().describe("Pagination cursor from a previous list_unreviewed result"),
+    limit: z.number().int().min(1).max(100).default(25),
+  };
   registerTool(
     "compliance_review",
-    {
-      operations: TOOL_OPERATIONS.compliance_review,
-      description: "Review compliance dashboard state, list unreviewed policy changes, or acknowledge changes when explicitly requested.",
-      inputSchema: {
-        action: z.enum(["stats", "list_unreviewed", "acknowledge", "bulk_acknowledge"]),
-        change_type: z.string().optional(),
-        cursor: z.string().optional(),
-        limit: z.number().int().min(1).max(100).default(25),
-        diff_id: z.number().int().optional(),
-        diff_ids: z.array(z.number().int()).min(1).max(200).optional(),
-        notes: z.string().max(500).optional(),
-      },
-    },
+    access === "write"
+      ? {
+          operations: TOOL_OPERATIONS.compliance_review,
+          // Acknowledging records a review; it removes nothing and repeating it does not add another.
+          annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+          description: `Review the organization's policy-change compliance queue: dashboard stats, unreviewed policy changes, and acknowledging changes when the user explicitly asks.
+Use stats or list_unreviewed to see which tracked policies changed. Use acknowledge (diff_id) or bulk_acknowledge (diff_ids) only on an explicit request: it records the review in the organization's Backwork compliance log and sends any compliance.acknowledged webhooks.`,
+          inputSchema: {
+            action: z.enum(["stats", "list_unreviewed", "acknowledge", "bulk_acknowledge"]),
+            ...complianceReadInput,
+            diff_id: z.number().int().optional().describe("Change to acknowledge, from list_unreviewed"),
+            diff_ids: z.array(z.number().int()).min(1).max(200).optional().describe("Changes to acknowledge together"),
+            notes: z.string().max(500).optional().describe("Review note stored with the acknowledgment"),
+          },
+        }
+      : {
+          operations: { stats: TOOL_OPERATIONS.compliance_review.stats, list_unreviewed: TOOL_OPERATIONS.compliance_review.list_unreviewed },
+          annotations: CATALOG_READ,
+          description: `Review the organization's policy-change compliance queue: dashboard stats and the list of unreviewed policy changes.
+Use it when a user asks which tracked coverage policies changed recently and still need review. It reads the organization's own Backwork compliance data and changes nothing.`,
+          inputSchema: { action: z.enum(["stats", "list_unreviewed"]), ...complianceReadInput },
+        },
     async ({ action, change_type, cursor, limit, diff_id, diff_ids, notes }) => {
       try {
         if (action === "stats") {
@@ -1692,6 +1699,8 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     "webhook_management",
     {
       operations: TOOL_OPERATIONS.webhook_management,
+      // Delivers to the organization's own external URLs, and 'delete' removes an endpoint.
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
       description:
         "List, create, update, delete, or test webhook endpoints. Use only when the user is explicitly managing webhook configuration. Backwork delivers one event type, compliance.acknowledged; policy-change webhooks are not sent.",
       inputSchema: {
@@ -1733,22 +1742,26 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     },
   );
 
-  registerTool(
-    "system_health",
-    {
-      operations: TOOL_OPERATIONS.system_health,
-      description: "Check Backwork API health and dependency status. Use for diagnostics, not for coverage research.",
-      inputSchema: {},
-    },
-    async () => {
-      try {
-        const result = await backworkRequest("getHealth");
-        return toolResult(formatJson(result.data), result.data, result.meta);
-      } catch (error) {
-        return errorResult(formatToolError("check health", error));
-      }
-    },
-  );
+  // Diagnostics for API-key integrators; a hosted read-only connection has no use for it.
+  if (access === "write") {
+    registerTool(
+      "system_health",
+      {
+        operations: TOOL_OPERATIONS.system_health,
+        annotations: CATALOG_READ,
+        description: "Check Backwork API health and dependency status. Use for diagnostics, not for coverage research.",
+        inputSchema: {},
+      },
+      async () => {
+        try {
+          const result = await backworkRequest("getHealth");
+          return toolResult(formatJson(result.data), result.data, result.meta);
+        } catch (error) {
+          return errorResult(formatToolError("check health", error));
+        }
+      },
+    );
+  }
 }
 
 function createBackworkMcpServer(access: Scope): McpServer {
@@ -1762,7 +1775,7 @@ function createBackworkMcpServer(access: Scope): McpServer {
     exposeUnavailable: exposeUnavailableTools,
   });
 
-  registerWorkflowTools(registerTool);
+  registerWorkflowTools(registerTool, access);
   registerWidgetResources(server);
 
   return server;

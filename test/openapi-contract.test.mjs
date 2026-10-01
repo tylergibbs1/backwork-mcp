@@ -49,6 +49,18 @@ test("a removed query parameter, path, or response field is drift", () => {
   assert.ok(problems.includes("listPolicies (GET /policies): reads data.[].source_url, which the success response does not declare"));
 });
 
+test("a keyed-record, meta, or write-access read the response does not declare is drift", () => {
+  const catalog = {
+    ...withOperation("getSpendingByCode", { reads: ["*.total_paid", "*.no_such_field"], metaReads: ["patient_count_disclosure", "no_such_meta"] }),
+    listUnreviewedChanges: { ...BACKWORK_OPERATIONS.listUnreviewedChanges, readsForWriteAccess: ["[].no_such_id"] },
+  };
+  assert.deepEqual(checkContract(spec, catalog), [
+    "getSpendingByCode (GET /spending/by-code): reads data.*.no_such_field, which the success response does not declare",
+    "getSpendingByCode (GET /spending/by-code): reads meta.no_such_meta, which the success response does not declare",
+    "listUnreviewedChanges (GET /compliance/unreviewed): reads data.[].no_such_id, which the success response does not declare",
+  ]);
+});
+
 test("an availability marker added or lifted is drift", () => {
   const marked = structuredClone(spec);
   marked.paths["/compliance/stats"].get["x-backwork-availability"] = "unavailable-in-production";
