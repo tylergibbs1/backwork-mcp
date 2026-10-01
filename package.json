@@ -1,6 +1,6 @@
 {
   "name": "@backwork/mcp",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "MCP server for Backwork: Medicare and payer medical policy, prior authorization, claim risk, and medical codes. Hosted OAuth remote or local stdio.",
   "mcpName": "io.github.tylergibbs1/backwork-mcp",
   "type": "module",
