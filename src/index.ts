@@ -813,10 +813,14 @@ function toolError(message: string): CallToolResult {
   return errorResult(`Error: ${message}`);
 }
 
+/** Appended to every tool, so no tool can omit what Backwork does and does not accept. */
+const DATA_HANDLING_NOTE =
+  "Takes codes, payers, plan types and states only. Never send patient names, dates of birth, member IDs or other patient identifiers.";
+
 function enhanceDescription(description: string): string {
   const responseFormatNote =
     "Supports optional response_format: 'markdown' (default) for readable text or 'json' for the returned structuredContent object.";
-  return `${description}\n\n${responseFormatNote}`;
+  return `${description}\n\n${DATA_HANDLING_NOTE}\n\n${responseFormatNote}`;
 }
 
 type ActionExposure = { offered: string[]; withheld: Map<Exclude<Exposure, "offered">, string[]> };
@@ -1254,7 +1258,7 @@ This tool can combine code lookup, related policy evidence, prior-auth checks (t
           .array(z.enum(["rvu", "policies", "rates"]))
           .default(["rvu", "policies"])
           .describe("Code detail data to include when running code_details"),
-        state: z.string().length(2).optional().describe("Two-letter patient state used to infer MAC jurisdiction, e.g. TX"),
+        state: z.string().length(2).optional().describe("Two-letter state where the service is provided, used to infer the MAC jurisdiction, e.g. TX"),
         jurisdiction: z.string().max(10).optional().describe("Optional MAC jurisdiction code for policy filtering, e.g. JM or JH"),
         diagnosis_codes: z.array(z.string()).max(20).optional().describe("Diagnosis codes when claim-risk validation is needed"),
         payer: z
@@ -1529,7 +1533,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
       description: `Validate a claim before submission: estimate denial risk and show coverage status, prior-auth need, documentation requirements and the policies behind them.
 Use it when a user asks whether a claim for given procedure and diagnosis codes is likely to be denied, or what documentation the payer will expect. To test one policy's structured criteria as well, pass policy_id with coverage_parameters.
 Limits: answers come only from the policies Backwork indexes (Medicare NCDs, LCDs and Articles, and the commercial payer policies in its catalog). It does not submit or look up a real claim and has no claim history; when no policy matches it reports the result as unknown. Up to 10 procedure codes.
-Side effects: none. It is read-only. Send codes and plan context only, never patient identifiers.`,
+Side effects: none. It is read-only.`,
       // A read connection gets no idempotency key: the call is read-only, so a retry is already safe.
       inputSchema:
         access === "write"
@@ -1573,7 +1577,7 @@ Side effects: none. It is read-only. Send codes and plan context only, never pat
       description: `Check whether procedure codes need prior authorization, or start and poll payer website research on a payer's prior-authorization rules.
 Use action='check' first. It answers at once from Backwork's policy catalog: traditional Medicare NCDs and LCDs, or the named payer's own policies when payer is given. It returns documentation requirements and citations. When no policy matches, the answer is unknown, not "not required".
 Use action='start_research' when check finds no evidence for a commercial payer. It queues a background job that searches public payer websites; it does not contact the payer or submit a request. Results can take a few minutes, then poll with action='get_research' and the returned research_id. Each start_research call starts a new job, so poll instead of starting again.
-Limits: CPT/HCPCS codes, up to 10 per call. Results are evidence to confirm with the payer, not an authorization decision. Send no patient identifiers.`,
+Limits: CPT/HCPCS codes, up to 10 per call. Results are evidence to confirm with the payer, not an authorization decision.`,
       inputSchema: {
         action: z
           .enum(["check", "start_research", "get_research"])

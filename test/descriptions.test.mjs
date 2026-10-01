@@ -79,3 +79,13 @@ test("each sample request selects its intended tool by description overlap", () 
     assert.equal(scored[0].name, expected, `"${prompt}" selected ${scored[0].name} (${scored.map((s) => `${s.name}=${s.score.toFixed(2)}`).join(", ")})`);
   }
 });
+
+// Directory reviewers and host classifiers read tool definitions; they must say plainly that no patient data is taken.
+test("every tool says it takes no patient identifiers, and no input is described as patient data", () => {
+  for (const tool of tools) {
+    assert.match(tool.description, /Never send patient names, dates of birth, member IDs or other patient identifiers\./, `${tool.name}: missing the data-handling note`);
+    for (const [field, schema] of Object.entries(tool.inputSchema.properties ?? {})) {
+      assert.doesNotMatch(schema.description ?? "", /\bpatient\b/i, `${tool.name}.${field}: input described as patient data`);
+    }
+  }
+});
