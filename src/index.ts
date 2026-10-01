@@ -24,6 +24,7 @@ import {
 import { BackworkApiError, formatApiFailure, parseApiFailure } from "./api-errors.js";
 import { codeSourceNote, parseCodeSources, type SourcedCode } from "./code-source.js";
 import { limitCodeDetailsToPayer, otherPayersNote, resolveRequestedPayer } from "./payer-scope.js";
+import { parsePriorAuthCheck, parseResearchDetermination, verdictAnswer } from "./prior-auth-verdict.js";
 import { extractProvenance, formatProvenance, provenanceSchema } from "./provenance.js";
 import { projectEnvelope } from "./projection.js";
 import { TOOL_OPERATIONS } from "./tool-operations.js";
@@ -622,12 +623,12 @@ function formatPolicy(policy: any, detailed = false): string {
 function formatPriorAuth(result: any): string {
   const lines: string[] = [];
 
-  // Main determination. With no matching policy the API still sends pa_required: false, which
-  // means "no evidence", not "not required".
-  const paAnswer = result.coverage_status === "unknown" ? "UNKNOWN" : result.pa_required ? "YES" : "NO";
-  lines.push(`Prior Authorization Required: ${paAnswer}`);
-  lines.push(`Confidence: ${result.confidence.toUpperCase()}`);
-  lines.push(`Reason: ${result.reason}`);
+  const verdict = parsePriorAuthCheck(result);
+  lines.push(`Prior Authorization Required: ${verdictAnswer(verdict)}`);
+  if (verdict.confidence) lines.push(`Confidence: ${verdict.confidence.toUpperCase()}`);
+  // An unknown verdict's API reason describes only the check's own scope, e.g. "No coverage policies found".
+  if (verdict.reason) lines.push(`Reason: ${verdict.reason}`);
+  else if (result.reason) lines.push(`Prior-auth check: ${result.reason}`);
   if (result.requires_manual_review) lines.push("Manual review required");
   if (result.known_gaps?.length > 0) {
     lines.push("Known gaps:");
@@ -1206,11 +1207,11 @@ function formatResearch(result: any): string {
   }
 
   if (result.result?.determination) {
-    const determination = result.result.determination;
+    const determination = parseResearchDetermination(result.result.determination);
     lines.push("\n--- Determination ---");
-    lines.push(`PA Required: ${determination.pa_required ? "YES" : "NO"}`);
-    lines.push(`Confidence: ${determination.confidence}`);
-    if (determination.reasoning) lines.push(`Reasoning: ${determination.reasoning}`);
+    lines.push(`PA Required: ${verdictAnswer(determination)}`);
+    if (determination.confidence) lines.push(`Confidence: ${determination.confidence}`);
+    if (determination.reason) lines.push(`Reasoning: ${determination.reason}`);
   }
 
   if (result.result?.documentation_requirements?.length) {
@@ -1335,6 +1336,9 @@ This tool can combine code lookup, related policy evidence, prior-auth checks (t
           data.prior_auth = priorAuth;
           lines.push("\n--- Prior Authorization ---");
           lines.push(formatPriorAuth(priorAuth));
+          if (requested.has("code_details") && parsePriorAuthCheck(priorAuth).verdict === "unknown") {
+            lines.push("The prior-auth check gave no answer, so policies under Code Details were not evaluated for prior auth.");
+          }
         }
 
         if (requested.has("claim_risk")) {

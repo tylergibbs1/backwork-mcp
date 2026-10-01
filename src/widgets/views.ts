@@ -1,5 +1,6 @@
 import { codeSourceLabel, parseCodeSource } from "../code-source.js";
 import { policyLink } from "../policy-links.js";
+import { parsePriorAuthCheck, parseResearchDetermination } from "../prior-auth-verdict.js";
 import { authorityOf, httpUrl } from "../provenance.js";
 import type {
   ComparisonCell,
@@ -156,9 +157,7 @@ export function buildCoverageCard(codesRequested: string[], data: { code_details
   return {
     kind: "coverage_card",
     codes_requested: codesRequested,
-    prior_auth: priorAuth
-      ? { required: bool(priorAuth.pa_required), confidence: str(priorAuth.confidence), reason: str(priorAuth.reason) }
-      : null,
+    prior_auth: priorAuth ? parsePriorAuthCheck(priorAuth) : null,
     policies: policies.slice(0, MAX_POLICIES).map((policy) => ({
       ...policy,
       codes: policy.codes.slice(0, MAX_CODES_PER_POLICY),
@@ -168,12 +167,9 @@ export function buildCoverageCard(codesRequested: string[], data: { code_details
   };
 }
 
-const emptyChecklist: Omit<PriorAuthChecklistView, "status"> = {
+const emptyChecklist: Omit<PriorAuthChecklistView, "status" | "prior_auth"> = {
   kind: "prior_auth_checklist",
   research_id: null,
-  pa_required: null,
-  confidence: null,
-  reason: null,
   mac: null,
   codes_requiring_pa: [],
   documentation: [],
@@ -208,9 +204,7 @@ export function buildPriorAuthChecklist(check: unknown): PriorAuthChecklistView 
   return {
     ...emptyChecklist,
     status: "complete",
-    pa_required: bool(data.pa_required),
-    confidence: str(data.confidence),
-    reason: str(data.reason),
+    prior_auth: parsePriorAuthCheck(data),
     mac: macName ? { name: macName, jurisdiction: str(mac?.jurisdiction) } : null,
     codes_requiring_pa: codesRequiringPa.slice(0, MAX_LIST_ITEMS * 2),
     documentation: strings(data.documentation_checklist).map((text) => ({ text, mandatory: null })),
@@ -237,7 +231,6 @@ function researchStatus(value: unknown): PriorAuthChecklistView["status"] {
 export function buildResearchChecklist(research: unknown): PriorAuthChecklistView {
   const data = isRecord(research) ? research : {};
   const result = isRecord(data.result) ? data.result : {};
-  const determination = isRecord(result.determination) ? result.determination : {};
   const error = str(data.error);
 
   const citations = records(result.payer_policies)
@@ -261,9 +254,7 @@ export function buildResearchChecklist(research: unknown): PriorAuthChecklistVie
     ...emptyChecklist,
     status: researchStatus(data.status),
     research_id: str(data.research_id),
-    pa_required: bool(determination.pa_required),
-    confidence: str(determination.confidence),
-    reason: str(determination.reasoning),
+    prior_auth: parseResearchDetermination(result.determination),
     documentation: records(result.documentation_requirements)
       .map((item) => ({ text: str(item.requirement), mandatory: bool(item.mandatory) }))
       .filter((item): item is { text: string; mandatory: boolean | null } => item.text !== null)

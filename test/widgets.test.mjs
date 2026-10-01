@@ -278,7 +278,7 @@ describe("structured content", () => {
     assert.equal(inferred.codes[0].source_label, "Inferred from policy title");
     assert.equal(inferred.link, null, "a javascript: source URL is not a link");
     assert.deepEqual(commercial.link, { kind: "source", url: "https://www.aetna.com/cpb/0113.html" });
-    assert.deepEqual(structuredContent.widget.prior_auth, { required: true, confidence: "high", reason: "Listed in the Medicare prior authorization program" });
+    assert.deepEqual(structuredContent.widget.prior_auth, { verdict: "required", confidence: "high", reason: "Listed in the Medicare prior authorization program" });
   });
 
   test("prior-auth checklist lists PA codes, documentation, gaps and inferred codes", async () => {
@@ -580,7 +580,7 @@ describe("no empty cards", () => {
     const minimal = {
       coverage_card: { kind: "coverage_card", codes_requested: ["1"], prior_auth: null, policies: [], policies_omitted: 0 },
       prior_auth_checklist: {
-        kind: "prior_auth_checklist", status: "complete", research_id: null, pa_required: null, confidence: null, reason: null, mac: null,
+        kind: "prior_auth_checklist", status: "complete", research_id: null, prior_auth: { verdict: "unknown", confidence: null, reason: null }, mac: null,
         codes_requiring_pa: [], documentation: [], known_gaps: [], inferred_codes: [], citations: [],
       },
       policy_comparison: { kind: "policy_comparison", codes: ["1"], has_variation: null, columns: [], rows: [], policies: [], unresolved_jurisdictions: [], columns_omitted: 0 },
