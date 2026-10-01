@@ -1,0 +1,15 @@
+{
+  "name": "backwork",
+  "displayName": "Backwork",
+  "version": "0.1.0",
+  "description": "Payer coverage-policy research for Medicare and commercial payers: coverage checks, prior authorization, policy changes, and denial appeal prep, cited to the source policy.",
+  "author": {
+    "name": "Backwork LLC",
+    "email": "support@backworkhealth.com",
+    "url": "https://backworkhealth.com"
+  },
+  "homepage": "https://backworkhealth.com/docs",
+  "repository": "https://github.com/tylergibbs1/backwork-mcp",
+  "license": "MIT",
+  "keywords": ["prior-authorization", "medical-policy", "medicare", "payer", "coverage", "claims", "appeals", "mcp"]
+}

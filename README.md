@@ -453,3 +453,30 @@ Wait for the reset window or use a higher-capacity API plan.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Claude Code plugin
+
+The `backwork` plugin bundles the hosted MCP server with four research skills: prior authorization, coverage checks, policy changes, and denial appeal prep. Install it from this repository's plugin marketplace:
+
+```text
+/plugin marketplace add tylergibbs1/backwork-mcp
+/plugin install backwork@backwork
+```
+
+Then run `/mcp`, select `plugin:backwork:backwork`, and finish the OAuth sign-in. New accounts start with 100 free credits. See [plugins/backwork/README.md](plugins/backwork/README.md) for the skills and the `/backwork:pa` and `/backwork:coverage` commands.
+
+The marketplace manifest is [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json). `npm test` checks the manifests and every `SKILL.md`. CI also runs `claude plugin validate --strict` on the marketplace and the plugin.
+
+## Claude.ai skills
+
+The same four skills work in claude.ai. They need the Backwork connector to call tools.
+
+1. Add the connector: **Settings > Connectors > Add custom connector**, name it `Backwork`, and enter `https://backworkhealth.com/mcp`. Finish the OAuth sign-in.
+2. Build one zip per skill. The zips go to `dist/claude-skills/`, which git ignores:
+
+   ```bash
+   node scripts/build-claude-skills.mjs
+   ```
+
+   Each zip holds the skill folder at its root, for example `coverage-check.zip` contains `coverage-check/SKILL.md`. The build fails if a `SKILL.md` breaks the claude.ai rules (name matches its folder, description 200 characters or fewer).
+3. Upload each zip: open **Customize > Skills** (in older versions, **Settings > Capabilities > Skills**), click **Add**, and select the zip. Custom skills need a Pro, Max, Team, or Enterprise plan with code execution turned on. Each user uploads their own copy.
