@@ -117,6 +117,7 @@ export const BACKWORK_OPERATIONS = {
       "mac",
       ...sourceFields.map((field) => `matched_policies[].${field}`),
       "matched_policies[].payer.name",
+      "matched_policies[].payer.slug",
       "matched_policies[].codes",
       "documentation_checklist",
       "criteria_details.indications[].text",

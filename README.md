@@ -318,7 +318,7 @@ A tool with no offered action is hidden. A partly offered tool drops the withhel
 
 | Primary tool | Purpose |
 | --- | --- |
-| `backwork_coverage_lookup` | Look up procedure codes and combine code details, policy evidence, prior authorization, claim risk, jurisdiction comparison, and spending evidence |
+| `backwork_coverage_lookup` | Look up procedure codes and combine code details, policy evidence, prior authorization, claim risk, jurisdiction comparison, and spending evidence. With `payer`, code details list only that payer's policies and say how many other payers' policies were left out |
 | `backwork_policy_research` | Search policies, fetch one policy, search extracted criteria, review policy changes, map MAC jurisdictions, or compare how MACs cover the same codes |
 | `backwork_claim_validation` | Validate claim coverage, documentation requirements, denial risk, and optional policy-specific criteria |
 | `backwork_prior_auth_research` | Check prior authorization from Backwork's policies (Medicare, or a named payer's), or start and poll a background job that searches public payer websites |

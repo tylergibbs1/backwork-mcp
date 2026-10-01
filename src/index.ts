@@ -23,6 +23,7 @@ import {
 } from "./api-operations.js";
 import { BackworkApiError, formatApiFailure, parseApiFailure } from "./api-errors.js";
 import { codeSourceNote, parseCodeSources, type SourcedCode } from "./code-source.js";
+import { limitCodeDetailsToPayer, otherPayersNote, resolveRequestedPayer } from "./payer-scope.js";
 import { extractProvenance, formatProvenance, provenanceSchema } from "./provenance.js";
 import { projectEnvelope } from "./projection.js";
 import { TOOL_OPERATIONS } from "./tool-operations.js";
@@ -1242,7 +1243,7 @@ This tool can combine code lookup, related policy evidence, prior-auth checks (t
           .string()
           .max(80)
           .optional()
-          .describe("Payer name, slug or code, e.g. 'Moda Health'. The prior-auth check answers from this payer's policies; omit it for traditional Medicare."),
+          .describe("Payer name, slug or code, e.g. 'Moda Health'. The prior-auth check answers from this payer's policies, and code details list only this payer's policies. Omit it for traditional Medicare."),
         plan_type: z.enum(["commercial", "medicare_advantage", "medicaid", "traditional_medicare", "exchange"]).optional(),
         date_of_service: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe(`${POLICY_AS_OF_DATE} Used by the claim_risk module.`),
         site_of_service: z.enum(["office", "outpatient_hospital", "asc", "inpatient", "home", "telehealth"]).optional(),
@@ -1267,6 +1268,7 @@ This tool can combine code lookup, related policy evidence, prior-auth checks (t
         const lines = [`Coverage Lookup for ${procedure_codes.join(", ")}`];
         const normalizedCodeInclude = normalizeInclude(code_include, "rvu,policies");
 
+        let codeDetails: unknown;
         if (requested.has("code_details")) {
           const result =
             procedure_codes.length === 1
@@ -1286,18 +1288,36 @@ This tool can combine code lookup, related policy evidence, prior-auth checks (t
                     include: normalizedCodeInclude,
                   },
                 });
-          data.code_details = result.data;
-          lines.push("\n--- Code Details ---");
-          lines.push(procedure_codes.length === 1 ? formatCode(result.data) : formatBatchLookup(result.data));
+          codeDetails = result.data;
         }
 
+        let priorAuth: unknown;
         if (requested.has("prior_auth")) {
           const result = await backworkRequest("checkPriorAuth", {
             body: { procedure_codes, state, payer },
           });
-          data.prior_auth = result.data;
+          priorAuth = result.data;
+        }
+
+        if (requested.has("code_details")) {
+          // Code lookup cannot filter by payer, so a named payer's answer drops other payers' policy matches here.
+          let note: string | null = null;
+          if (payer) {
+            const scoped = limitCodeDetailsToPayer(codeDetails, resolveRequestedPayer(payer, priorAuth));
+            codeDetails = scoped.codeDetails;
+            data.other_payers = scoped.others;
+            note = otherPayersNote(payer, procedure_codes, scoped.others);
+          }
+          data.code_details = codeDetails;
+          lines.push("\n--- Code Details ---");
+          lines.push(procedure_codes.length === 1 ? formatCode(codeDetails) : formatBatchLookup(codeDetails));
+          if (note) lines.push(note);
+        }
+
+        if (requested.has("prior_auth")) {
+          data.prior_auth = priorAuth;
           lines.push("\n--- Prior Authorization ---");
-          lines.push(formatPriorAuth(result.data));
+          lines.push(formatPriorAuth(priorAuth));
         }
 
         if (requested.has("claim_risk")) {

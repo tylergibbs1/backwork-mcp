@@ -193,6 +193,7 @@ const CALLS = {
   backwork_coverage_lookup: [
     { procedure_codes: ["99213"], include: ["code_details", "prior_auth", "claim_risk", "jurisdiction_compare", "spending"], state: "TX", date_of_service: "2026-01-15" },
     { procedure_codes: ["99213", "J0585"], include: ["code_details"] },
+    { procedure_codes: ["99213"], payer: "Aetna", include: ["code_details", "prior_auth"] },
   ],
   backwork_policy_research: [
     { action: "search", query: "oxygen" },
