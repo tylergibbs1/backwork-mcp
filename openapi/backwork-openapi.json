@@ -9376,6 +9376,21 @@
               "string",
               "null"
             ]
+          },
+          "public_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Backwork's public page for this policy, or null when it has none. Active Medicare LCDs, Articles and NCDs: `https://backworkhealth.com/policy/{policy_id}`. Active commercial policies: `https://backworkhealth.com/policy/payer/{payer_slug}/{policy_id}`. A retired commercial policy points to its active successor's page when one is known.",
+            "examples": [
+              "https://backworkhealth.com/policy/L33831"
+            ]
           }
         },
         "required": [
@@ -9386,7 +9401,8 @@
           "jurisdiction",
           "source_url",
           "effective_date",
-          "last_verified_at"
+          "last_verified_at",
+          "public_url"
         ]
       },
       "ClaimValidationRequest": {
@@ -9868,6 +9884,21 @@
               "string",
               "null"
             ]
+          },
+          "public_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Backwork's public page for this policy, or null when it has none. Active Medicare LCDs, Articles and NCDs: `https://backworkhealth.com/policy/{policy_id}`. Active commercial policies: `https://backworkhealth.com/policy/payer/{payer_slug}/{policy_id}`. A retired commercial policy points to its active successor's page when one is known.",
+            "examples": [
+              "https://backworkhealth.com/policy/L33831"
+            ]
           }
         },
         "required": [
@@ -9878,7 +9909,8 @@
           "source",
           "jurisdiction",
           "effective_date",
-          "source_url"
+          "source_url",
+          "public_url"
         ]
       },
       "CodeSource": {
@@ -10034,6 +10066,21 @@
               "null"
             ]
           },
+          "public_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Backwork's public page for this policy, or null when it has none. Active Medicare LCDs, Articles and NCDs: `https://backworkhealth.com/policy/{policy_id}`. Active commercial policies: `https://backworkhealth.com/policy/payer/{payer_slug}/{policy_id}`. A retired commercial policy points to its active successor's page when one is known.",
+            "examples": [
+              "https://backworkhealth.com/policy/L33831"
+            ]
+          },
           "is_national": {
             "description": "True for national policies, which apply to every jurisdiction",
             "type": "boolean"
@@ -10071,6 +10118,7 @@
           "policy_type",
           "effective_date",
           "source_url",
+          "public_url",
           "codes"
         ]
       },
@@ -10238,12 +10286,28 @@
               },
               "policy_type": {
                 "type": "string"
+              },
+              "public_url": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Backwork's public page for this policy, or null when it has none. Active Medicare LCDs, Articles and NCDs: `https://backworkhealth.com/policy/{policy_id}`. Active commercial policies: `https://backworkhealth.com/policy/payer/{payer_slug}/{policy_id}`. A retired commercial policy points to its active successor's page when one is known.",
+                "examples": [
+                  "https://backworkhealth.com/policy/L33831"
+                ]
               }
             },
             "required": [
               "policy_id",
               "title",
-              "policy_type"
+              "policy_type",
+              "public_url"
             ]
           }
         },
@@ -10399,6 +10463,21 @@
                     "type": "null"
                   }
                 ]
+              },
+              "public_url": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Backwork's public page for this policy, or null when it has none. Active Medicare LCDs, Articles and NCDs: `https://backworkhealth.com/policy/{policy_id}`. Active commercial policies: `https://backworkhealth.com/policy/payer/{payer_slug}/{policy_id}`. A retired commercial policy points to its active successor's page when one is known.",
+                "examples": [
+                  "https://backworkhealth.com/policy/L33831"
+                ]
               }
             },
             "required": [
@@ -10406,7 +10485,8 @@
               "title",
               "policy_type",
               "jurisdiction",
-              "effective_date"
+              "effective_date",
+              "public_url"
             ]
           }
         },
@@ -11939,6 +12019,21 @@
               "null"
             ]
           },
+          "public_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Backwork's public page for this policy, or null when it has none. Active Medicare LCDs, Articles and NCDs: `https://backworkhealth.com/policy/{policy_id}`. Active commercial policies: `https://backworkhealth.com/policy/payer/{payer_slug}/{policy_id}`. A retired commercial policy points to its active successor's page when one is known.",
+            "examples": [
+              "https://backworkhealth.com/policy/L33831"
+            ]
+          },
           "source_shape": {
             "$ref": "#/components/schemas/SourceShape"
           },
@@ -12076,12 +12171,21 @@
               },
               "type": {
                 "type": "string"
+              },
+              "slug": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                "description": "URL slug of the payer's public Backwork pages (`/policy/payer/{slug}`). Assigned once; never changes.",
+                "examples": [
+                  "molina-healthcare"
+                ]
               }
             },
             "required": [
               "name",
               "code",
-              "type"
+              "type",
+              "slug"
             ]
           },
           "criteria": {
@@ -12145,6 +12249,7 @@
           "pdf_url",
           "description",
           "summary",
+          "public_url",
           "source_shape",
           "source_shape_reason",
           "specialty",
@@ -12209,6 +12314,37 @@
             "type": [
               "string",
               "null"
+            ]
+          },
+          "payer_slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                "description": "URL slug of the payer's public Backwork pages (`/policy/payer/{slug}`). Assigned once; never changes.",
+                "examples": [
+                  "molina-healthcare"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The payer's URL slug; null when the policy has no payer"
+          },
+          "public_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Backwork's public page for this policy, or null when it has none. Active Medicare LCDs, Articles and NCDs: `https://backworkhealth.com/policy/{policy_id}`. Active commercial policies: `https://backworkhealth.com/policy/payer/{payer_slug}/{policy_id}`. A retired commercial policy points to its active successor's page when one is known.",
+            "examples": [
+              "https://backworkhealth.com/policy/L33831"
             ]
           },
           "source_shape": {
@@ -12303,6 +12439,8 @@
           "retire_date",
           "status",
           "source_url",
+          "payer_slug",
+          "public_url",
           "source_shape",
           "source_shape_reason"
         ]
@@ -12429,6 +12567,21 @@
                     }
                   ]
                 },
+                "public_url": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Backwork's public page for this policy, or null when it has none. Active Medicare LCDs, Articles and NCDs: `https://backworkhealth.com/policy/{policy_id}`. Active commercial policies: `https://backworkhealth.com/policy/payer/{payer_slug}/{policy_id}`. A retired commercial policy points to its active successor's page when one is known.",
+                  "examples": [
+                    "https://backworkhealth.com/policy/L33831"
+                  ]
+                },
                 "codes": {
                   "type": "array",
                   "items": {
@@ -12471,6 +12624,7 @@
                 "source_url",
                 "effective_date",
                 "last_verified_at",
+                "public_url",
                 "codes"
               ]
             }
@@ -12985,6 +13139,21 @@
                 "type": "null"
               }
             ]
+          },
+          "public_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Backwork's public page for this policy, or null when it has none. Active Medicare LCDs, Articles and NCDs: `https://backworkhealth.com/policy/{policy_id}`. Active commercial policies: `https://backworkhealth.com/policy/payer/{payer_slug}/{policy_id}`. A retired commercial policy points to its active successor's page when one is known.",
+            "examples": [
+              "https://backworkhealth.com/policy/L33831"
+            ]
           }
         },
         "required": [
@@ -12995,7 +13164,8 @@
           "jurisdiction",
           "source_url",
           "effective_date",
-          "last_verified_at"
+          "last_verified_at",
+          "public_url"
         ]
       },
       "PriorAuthResearch": {

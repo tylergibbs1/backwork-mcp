@@ -70,7 +70,12 @@ function widgetPolicy(record: JsonRecord): WidgetPolicy | null {
     payer: authorityOf(record),
     jurisdiction: str(record.jurisdiction),
     effective_date: str(record.effective_date),
-    link: policyLink({ policy_id: policyId, policy_type: policyType, source_url: record.source_url }),
+    link: policyLink({
+      policy_id: policyId,
+      policy_type: policyType,
+      source_url: record.source_url,
+      public_url: record.public_url,
+    }),
   };
 }
 
