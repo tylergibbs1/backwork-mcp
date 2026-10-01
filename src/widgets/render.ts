@@ -1,3 +1,4 @@
+import type { PriorAuthVerdict } from "../prior-auth-verdict.js";
 import type { ComponentKind, ViewKind, WidgetView } from "./schemas.js";
 
 /**
@@ -41,6 +42,15 @@ export function renderWidget(view: WidgetView): string {
     const [label, tone] = DISPOSITIONS[disposition] ?? [disposition.replace(/_/g, " "), "neutral"];
     return `<span class="badge ${tone}">${esc(label)}</span>`;
   };
+  const PRIOR_AUTH = {
+    required: ["Prior auth required", "pa"],
+    not_required: ["Prior auth not required", "covered"],
+    unknown: ["Prior auth unknown", "neutral"],
+  } satisfies Record<PriorAuthVerdict["verdict"], [string, string]>;
+  const priorAuthPill = (pa: PriorAuthVerdict, withConfidence: boolean): string => {
+    const [label, tone] = PRIOR_AUTH[pa.verdict];
+    return `<span class="pill ${tone}">${esc(label)}${withConfidence && pa.confidence ? ` · ${esc(pa.confidence)} confidence` : ""}</span>`;
+  };
   const sourceLabel = (source: string | null, label: string | null): string =>
     label ? `<span class="source${source === "document" ? "" : " flagged"}">${esc(label)}</span>` : "";
   type Linked = { policy_id: string; title: string; link: { kind: "backwork" | "source"; url: string } | null };
@@ -70,11 +80,15 @@ ${body}
 
   if (view.kind === "coverage_card") {
     const pa = view.prior_auth;
-    const paPill = pa
-      ? `<span class="pill ${pa.required === true ? "pa" : pa.required === false ? "covered" : "neutral"}">${
-          pa.required === true ? "Prior auth required" : pa.required === false ? "No prior auth" : "Prior auth unknown"
-        }${pa.confidence ? ` · ${esc(pa.confidence)} confidence` : ""}</span>`
-      : "";
+    const paPill = pa ? priorAuthPill(pa, true) : "";
+    // An unknown verdict carries no reason of its own; say what it means for the policies shown.
+    const paNote = !pa
+      ? ""
+      : pa.verdict !== "unknown"
+        ? pa.reason ?? ""
+        : view.policies.length
+          ? "The prior-auth check gave no answer for these codes. Review the policies below for prior-auth rules."
+          : "The prior-auth check gave no answer for these codes.";
     const policies = view.policies.map((policy) => {
       const codes = policy.codes
         .map((code) => `<li><span class="code">${esc(code.code)}</span>${badge(code.disposition)}${sourceLabel(code.source, code.source_label)}</li>`)
@@ -89,7 +103,7 @@ ${link(policy)}
     });
     return `<article class="card" aria-label="Backwork coverage result">
 <header><h2>Coverage for ${esc(view.codes_requested.join(", "))}</h2>${paPill}</header>
-${pa?.reason ? `<p class="reason">${esc(pa.reason)}</p>` : ""}
+${paNote ? `<p class="reason">${esc(paNote)}</p>` : ""}
 ${policies.join("") || '<p class="muted">No Backwork policy lists these codes.</p>'}
 ${more(view.policies_omitted, "policies")}
 </article>`;
@@ -99,10 +113,8 @@ ${more(view.policies_omitted, "policies")}
     const status =
       view.status !== "complete"
         ? `<span class="pill neutral">Research ${esc(view.status)}</span>`
-        : `<span class="pill ${view.pa_required === true ? "pa" : view.pa_required === false ? "covered" : "neutral"}">${
-            view.pa_required === true ? "Prior auth required" : view.pa_required === false ? "Prior auth not required" : "Prior auth unknown"
-          }</span>`;
-    const subtitle = join([view.confidence && `${view.confidence} confidence`, view.mac && join([view.mac.name, view.mac.jurisdiction], " ")]);
+        : priorAuthPill(view.prior_auth, false);
+    const subtitle = join([view.prior_auth.confidence && `${view.prior_auth.confidence} confidence`, view.mac && join([view.mac.name, view.mac.jurisdiction], " ")]);
     const codes = view.codes_requiring_pa
       .map((code) => `<li><span class="code">${esc(code.code)}</span><span class="muted">${esc(code.policy_id)}</span>${sourceLabel(code.source, code.source_label)}</li>`)
       .join("");
@@ -129,7 +141,7 @@ ${more(view.policies_omitted, "policies")}
     return `<article class="card" aria-label="Backwork prior authorization checklist">
 <header><h2>Prior authorization checklist</h2>${status}</header>
 ${subtitle ? `<p class="muted">${esc(subtitle)}</p>` : ""}
-${view.reason ? `<p class="reason">${esc(view.reason)}</p>` : ""}${pending}
+${view.prior_auth.reason ? `<p class="reason">${esc(view.prior_auth.reason)}</p>` : ""}${pending}
 ${section("Codes requiring prior auth", codes ? `<ul class="codes">${codes}</ul>` : "")}
 ${section("Documentation needed", documentation.length ? `<ul class="list checklist">${documentation.map((item) => `<li>${item}</li>`).join("")}</ul>` : "")}
 ${section("Known gaps", list(gaps))}

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { priorAuthVerdictSchema } from "../prior-auth-verdict.js";
+
 /**
  * The view models the UI components render. A tool that has a component
  * returns one of these as `structuredContent.widget`; its outputSchema declares
@@ -35,13 +37,7 @@ export const coverageCardSchema = z
   .object({
     kind: z.literal("coverage_card"),
     codes_requested: z.array(z.string()),
-    prior_auth: z
-      .object({
-        required: z.boolean().nullable(),
-        confidence: z.string().nullable(),
-        reason: z.string().nullable(),
-      })
-      .nullable(),
+    prior_auth: priorAuthVerdictSchema.nullable(),
     policies: z.array(
       widgetPolicySchema.extend({ codes: z.array(widgetCodeSchema), codes_omitted: z.number().int().nonnegative() }),
     ),
@@ -54,9 +50,7 @@ export const priorAuthChecklistSchema = z
     kind: z.literal("prior_auth_checklist"),
     status: z.enum(["complete", "pending", "running", "failed", "canceled"]),
     research_id: z.string().nullable(),
-    pa_required: z.boolean().nullable(),
-    confidence: z.string().nullable(),
-    reason: z.string().nullable(),
+    prior_auth: priorAuthVerdictSchema,
     mac: z.object({ name: z.string(), jurisdiction: z.string().nullable() }).nullable(),
     codes_requiring_pa: z.array(widgetCodeSchema.extend({ policy_id: z.string(), policy_title: z.string() })),
     documentation: z.array(z.object({ text: z.string(), mandatory: z.boolean().nullable() })),
