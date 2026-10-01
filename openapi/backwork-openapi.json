@@ -12445,6 +12445,31 @@
           "source_shape_reason"
         ]
       },
+      "PolicyPayer": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "description": "URL slug of the payer's public Backwork pages (`/policy/payer/{slug}`). Assigned once; never changes.",
+            "examples": [
+              "molina-healthcare"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "code",
+          "slug"
+        ],
+        "description": "The payer whose policy this is."
+      },
       "PolicyVersionEntry": {
         "type": "object",
         "properties": {
@@ -12582,6 +12607,17 @@
                     "https://backworkhealth.com/policy/L33831"
                   ]
                 },
+                "payer": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PolicyPayer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The payer whose policy this is; null for Medicare evidence"
+                },
                 "codes": {
                   "type": "array",
                   "items": {
@@ -12625,6 +12661,7 @@
                 "effective_date",
                 "last_verified_at",
                 "public_url",
+                "payer",
                 "codes"
               ]
             }
@@ -13154,6 +13191,17 @@
             "examples": [
               "https://backworkhealth.com/policy/L33831"
             ]
+          },
+          "payer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyPayer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The payer whose policy this is; null for Medicare evidence"
           }
         },
         "required": [
@@ -13165,7 +13213,8 @@
           "source_url",
           "effective_date",
           "last_verified_at",
-          "public_url"
+          "public_url",
+          "payer"
         ]
       },
       "PriorAuthResearch": {
