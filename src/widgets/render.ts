@@ -21,7 +21,7 @@ declare global {
 export function renderWidget(view: WidgetView): string {
   const esc = (value: unknown): string =>
     String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
-  const safeUrl = (value: string | null): string | null => (value && /^https?:\/\//i.test(value) ? value : null);
+  const safeUrl = (link: { url: string } | null): string | null => (link && /^https?:\/\//i.test(link.url) ? link.url : null);
   const join = (parts: Array<string | null | undefined | false>, separator = " · "): string => parts.filter(Boolean).join(separator);
 
   const DISPOSITIONS: Record<string, [string, string]> = {
@@ -37,9 +37,15 @@ export function renderWidget(view: WidgetView): string {
   };
   const sourceLabel = (source: string | null, label: string | null): string =>
     label ? `<span class="source${source === "document" ? "" : " flagged"}">${esc(label)}</span>` : "";
-  const link = (url: string | null, text: string, label: string): string => {
-    const href = safeUrl(url);
-    return href ? `<a class="link" href="${esc(href)}" data-external target="_blank" rel="noopener noreferrer" aria-label="${esc(label)}">${esc(text)}</a>` : "";
+  type Linked = { policy_id: string; title: string; link: { kind: "backwork" | "source"; url: string } | null };
+  /** `text` defaults to "Open policy" for a Backwork page and "Open source document" for a payer or CMS document. */
+  const link = (policy: Linked, text?: string): string => {
+    const href = safeUrl(policy.link);
+    if (!href || !policy.link) return "";
+    const where = policy.link.kind === "backwork" ? "on Backwork" : "source document";
+    const label = `Open ${policy.policy_id} ${where}: ${policy.title}`;
+    const shown = text ?? (policy.link.kind === "backwork" ? "Open policy" : "Open source document");
+    return `<a class="link" href="${esc(href)}" data-external target="_blank" rel="noopener noreferrer" aria-label="${esc(label)}">${esc(shown)}</a>`;
   };
   const section = (title: string, body: string): string => (body ? `<section><h3>${esc(title)}</h3>${body}</section>` : "");
   const list = (items: string[], ordered = false): string =>
@@ -62,7 +68,7 @@ export function renderWidget(view: WidgetView): string {
 <h3>${esc(policy.title)}</h3>
 <p class="muted">${esc(join([`Policy ${policy.policy_id}`, policy.effective_date && `Effective ${policy.effective_date}`]))}</p>
 <ul class="codes">${codes}</ul>${more(policy.codes_omitted, "codes")}
-${link(policy.url, "Open policy", `Open policy ${policy.policy_id}: ${policy.title}`)}
+${link(policy)}
 </section>`;
     });
     return `<article class="card" aria-label="Backwork coverage result">
@@ -96,7 +102,7 @@ ${more(view.policies_omitted, "policies")}
     ];
     const citations = view.citations.map(
       (policy) =>
-        `${link(policy.url, policy.title, `Open ${policy.policy_id}: ${policy.title}`) || esc(policy.title)} <span class="muted">${esc(
+        `${link(policy, policy.title) || esc(policy.title)} <span class="muted">${esc(
           join([policy.policy_id !== policy.title && policy.policy_id, policy.payer, policy.effective_date && `Effective ${policy.effective_date}`]),
         )}</span>`,
     );
@@ -148,9 +154,9 @@ ${section("Citations", list(citations, true))}
   const variation =
     view.has_variation === null ? "" : `<span class="pill ${view.has_variation ? "pa" : "covered"}">${view.has_variation ? "Coverage varies" : "Consistent coverage"}</span>`;
   const policyLinks = view.policies
-    .filter((policy) => safeUrl(policy.url))
+    .filter((policy) => safeUrl(policy.link))
     .slice(0, 6)
-    .map((policy) => `${link(policy.url, policy.policy_id, `Open ${policy.policy_id}: ${policy.title}`)} <span class="muted">${esc(policy.title)}</span>`);
+    .map((policy) => `${link(policy, policy.policy_id)} <span class="muted">${esc(policy.title)}</span>`);
   const notes = [
     view.unresolved_jurisdictions.length ? `No active contractor for ${esc(view.unresolved_jurisdictions.join(", "))}.` : "",
     view.columns_omitted ? `${view.columns_omitted} more jurisdictions not shown; compare fewer at a time to see them.` : "",

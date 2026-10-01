@@ -24,6 +24,7 @@ import {
 import { codeSourceNote, parseCodeSources, type SourcedCode } from "./code-source.js";
 import { extractProvenance, formatProvenance, provenanceSchema } from "./provenance.js";
 import { TOOL_OPERATIONS } from "./tool-operations.js";
+import { minimizeEnvelope } from "./trace-fields.js";
 import type { WidgetKind, WidgetView } from "./widgets/schemas.js";
 import { registerWidgetResources, widgetOutputSchema, widgetToolMeta } from "./widgets/templates.js";
 import { buildCoverageCard, buildPolicyComparison, buildPriorAuthChecklist, buildResearchChecklist } from "./widgets/views.js";
@@ -118,7 +119,6 @@ class BackworkApiError extends Error {
   code?: string;
   hint?: string;
   details?: unknown;
-  requestId?: string;
   upgradeTo?: string;
   requiredPlan?: string;
 
@@ -128,7 +128,6 @@ class BackworkApiError extends Error {
     code?: string;
     hint?: string;
     details?: unknown;
-    requestId?: string;
     upgradeTo?: string;
     requiredPlan?: string;
   }) {
@@ -138,7 +137,6 @@ class BackworkApiError extends Error {
     this.code = params.code;
     this.hint = params.hint;
     this.details = params.details;
-    this.requestId = params.requestId;
     this.upgradeTo = params.upgradeTo;
     this.requiredPlan = params.requiredPlan;
   }
@@ -421,20 +419,25 @@ async function backworkRequest<Id extends OperationId>(
   }
 
   if (!response.ok) {
+    // The request ID is for support, so it goes to the server log and never into tool output.
+    console.error(
+      `Backwork API ${operationId} failed: HTTP ${response.status}${data.error?.code ? ` ${data.error.code}` : ""}${
+        data.meta?.request_id ? ` request_id=${data.meta.request_id}` : ""
+      }`,
+    );
     throw new BackworkApiError({
       status: response.status,
       code: data.error?.code,
       message: data.error?.message || `API error: ${response.status}`,
       hint: data.error?.hint,
       details: data.error?.details,
-      requestId: data.meta?.request_id,
       upgradeTo: data.error?.upgrade_to,
       requiredPlan: data.error?.required_plan,
     });
   }
 
   if (data && typeof data === "object" && "data" in data) {
-    return { ...data, data: parseCodeSources(operationId, data.data) };
+    return minimizeEnvelope(operationId, { ...data, data: parseCodeSources(operationId, data.data) });
   }
   return data;
 }
@@ -515,8 +518,7 @@ function formatToolError(action: string, error: unknown): string {
     return [
       `Cannot ${action}: the Backwork API reports this endpoint is not available in production yet.`,
       "Do not retry. Use an available action or tell the user this data is not available.",
-      error.requestId ? `Request ID: ${error.requestId}` : null,
-    ].filter(Boolean).join("\n");
+    ].join("\n");
   }
   if (error instanceof BackworkApiError) {
     const details = error.details && typeof error.details === "object" ? (error.details as Record<string, unknown>) : {};
@@ -537,19 +539,17 @@ function formatToolError(action: string, error: unknown): string {
         `Cannot ${action}: this API key is authenticated but is not authorized for that operation.`,
         requirements.length ? `Required: ${requirements.join("; ")}.` : "Required: a higher-scope key or plan entitlement.",
         "Use a key with the required scope/plan, upgrade the organization, or choose a read-only tool for this workflow.",
-        error.requestId ? `Request ID: ${error.requestId}` : null,
       ].filter(Boolean).join("\n");
     }
 
     if (error.status === 401) {
-      return `Cannot ${action}: the API key was missing, invalid, revoked, or suspended.${error.requestId ? `\nRequest ID: ${error.requestId}` : ""}`;
+      return `Cannot ${action}: the API key was missing, invalid, revoked, or suspended.`;
     }
 
     return [
       `Error ${action}: ${error.message}`,
       error.hint ? `Hint: ${error.hint}` : null,
       error.code ? `Code: ${error.code}` : null,
-      error.requestId ? `Request ID: ${error.requestId}` : null,
     ].filter(Boolean).join("\n");
   }
 

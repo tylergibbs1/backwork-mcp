@@ -15,6 +15,7 @@ const TOOL_WIDGETS = {
 };
 
 const LCD_URL = "https://www.cms.gov/medicare-coverage-database/view/lcd.aspx?lcdid=33718";
+const backworkPage = (policyId) => ({ kind: "backwork", url: `https://backworkhealth.com/policy/${policyId}` });
 const policyMatch = (policy_id, source, extra = {}) => ({
   policy_id,
   title: `Policy ${policy_id}`,
@@ -42,7 +43,12 @@ const RESPONSES = {
     code_system: "HCPCS",
     policies: [
       policyMatch("L1", "document", { disposition: "covered" }),
-      policyMatch("L2", "inferred_title_match", { title: 'Drug <img src=x onerror="alert(1)"> policy', source_url: "javascript:alert(1)" }),
+      policyMatch("L2", "inferred_title_match", {
+        title: 'Drug <img src=x onerror="alert(1)"> policy',
+        policy_type: "Drug Policy",
+        source_url: "javascript:alert(1)",
+      }),
+      policyMatch("AET-1", "document", { policy_type: "Drug Policy", source_url: "https://www.aetna.com/cpb/0113.html" }),
     ],
   }),
   "POST /api/v1/prior-auth/check": () => ({
@@ -177,14 +183,15 @@ describe("structured content", () => {
     });
   }
 
-  test("coverage card labels inferred codes and drops unsafe links", async () => {
+  test("coverage card labels inferred codes and links Backwork pages, else the source", async () => {
     const { structuredContent } = await CALLS.coverage_card();
-    const [listed, inferred] = structuredContent.widget.policies;
+    const [listed, inferred, commercial] = structuredContent.widget.policies;
     assert.deepEqual(listed.codes[0], { code: "J1001", code_system: "HCPCS", disposition: "covered", source: "document", source_label: "Listed in policy" });
     assert.equal(listed.payer, "CMS");
-    assert.equal(listed.url, LCD_URL);
+    assert.deepEqual(listed.link, backworkPage("L1"));
     assert.equal(inferred.codes[0].source_label, "Inferred from policy title");
-    assert.equal(inferred.url, null);
+    assert.equal(inferred.link, null, "a javascript: source URL is not a link");
+    assert.deepEqual(commercial.link, { kind: "source", url: "https://www.aetna.com/cpb/0113.html" });
     assert.deepEqual(structuredContent.widget.prior_auth, { required: true, confidence: "high", reason: "Listed in the Medicare prior authorization program" });
   });
 
@@ -199,7 +206,7 @@ describe("structured content", () => {
     assert.deepEqual(view.known_gaps, ["Commercial payer rules were not checked"]);
     assert.deepEqual(view.inferred_codes, [{ code: "J1002", policy_id: "L1", policy_title: "Policy L1" }]);
     assert.deepEqual(view.mac, { name: "Palmetto GBA", jurisdiction: "JM" });
-    assert.equal(view.citations[0].url, LCD_URL);
+    assert.deepEqual(view.citations[0].link, backworkPage("L1"));
   });
 
   test("a started research task renders as pending", async () => {
@@ -305,7 +312,8 @@ describe("component rendering", () => {
     assert.match(out, /Prior auth required · high confidence/);
     assert.match(out, /<span class="badge covered">Covered<\/span><span class="source">Listed in policy<\/span>/);
     assert.match(out, /<span class="source flagged">Inferred from policy title<\/span>/);
-    assert.match(out, new RegExp(`<a class="link" href="${LCD_URL.replace(/[?.]/g, "\\$&")}" data-external`));
+    assert.match(out, /<a class="link" href="https:\/\/backworkhealth\.com\/policy\/L1" data-external[^>]*aria-label="Open L1 on Backwork: Policy L1">Open policy<\/a>/);
+    assert.match(out, /<a class="link" href="https:\/\/www\.aetna\.com\/cpb\/0113\.html" data-external[^>]*>Open source document<\/a>/);
     // The second policy's title is escaped and its javascript: URL is not linked.
     assert.match(out, /Drug &lt;img src=x onerror=&quot;alert\(1\)&quot;&gt; policy/);
     assert.doesNotMatch(out, /<img|javascript:/);

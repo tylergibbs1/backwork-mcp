@@ -26,8 +26,8 @@ export const widgetPolicySchema = z.object({
   payer: z.string().nullable(),
   jurisdiction: z.string().nullable(),
   effective_date: z.string().nullable(),
-  /** An http(s) link to the policy document, or null when the API has none. */
-  url: z.string().nullable(),
+  /** Backwork's public page for the policy when there is one, else its http(s) source document; null when neither. */
+  link: z.object({ kind: z.enum(["backwork", "source"]), url: z.string() }).nullable(),
 });
 
 export const coverageCardSchema = z

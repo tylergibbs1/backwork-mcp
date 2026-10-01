@@ -156,7 +156,7 @@ After a server update, open the connection at [chatgpt.com/plugins](https://chat
 
 | Tool | Card | What it shows |
 | --- | --- | --- |
-| `backwork_coverage_lookup` | Coverage result | Each policy that lists the codes: payer (`CMS` for Medicare policies), title and number, effective date, a row per code with its disposition badge and source label, and an **Open policy** link to the source document |
+| `backwork_coverage_lookup` | Coverage result | Each policy that lists the codes: payer (`CMS` for Medicare policies), title and number, effective date, a row per code with its disposition badge and source label, and an **Open policy** link to the policy's Backwork page (Medicare LCDs, Articles, and NCDs) or, for other policies, its source document |
 | `backwork_prior_auth_research` | Prior-auth checklist | The determination and confidence, codes that require prior auth, documentation to gather, known gaps, and numbered citations. A started research task shows as pending until you ask again |
 | `backwork_policy_research` (`action: "compare"`) | Policy comparison | The codes side by side across Medicare contractors (MACs), one column per jurisdiction, with each cell's disposition and policy, and a coverage count per column |
 
@@ -287,7 +287,7 @@ Requires Node.js 18 or newer.
 
 Tool names use the `backwork_` prefix for discoverability when this server is installed alongside other MCP servers. The default surface is intentionally workflow-level rather than a 1:1 API wrapper, so agents see fewer choices and common tasks require fewer tool calls.
 
-All tools include `title`, `description`, `inputSchema`, `outputSchema`, and MCP annotations. Successful calls return readable text plus `structuredContent` with `message`, and when available, raw Backwork API `data` and `meta`. Tool-level failures return `isError: true`. For tools that combine read and write actions, annotations are conservative at the tool level.
+All tools include `title`, `description`, `inputSchema`, `outputSchema`, and MCP annotations. Successful calls return readable text plus `structuredContent` with `message`, and when available, raw Backwork API `data` and `meta`. Request IDs and response timestamps are left out of tool results; the server logs the request ID of a failed API call. Tool-level failures return `isError: true`. For tools that combine read and write actions, annotations are conservative at the tool level.
 
 ### Sources and currency
 

@@ -1,5 +1,6 @@
 import { codeSourceLabel, parseCodeSource } from "../code-source.js";
-import { authorityOf, httpUrl } from "../provenance.js";
+import { policyLink } from "../policy-links.js";
+import { authorityOf } from "../provenance.js";
 import type {
   ComparisonCell,
   CoverageCardView,
@@ -61,14 +62,15 @@ function widgetCode(code: string, record: JsonRecord, codeSystem: unknown = reco
 function widgetPolicy(record: JsonRecord): WidgetPolicy | null {
   const policyId = str(record.policy_id);
   if (!policyId) return null;
+  const policyType = str(record.policy_type);
   return {
     policy_id: policyId,
     title: str(record.title) ?? policyId,
-    policy_type: str(record.policy_type),
+    policy_type: policyType,
     payer: authorityOf(record),
     jurisdiction: str(record.jurisdiction),
     effective_date: str(record.effective_date),
-    url: httpUrl(record.source_url),
+    link: policyLink({ policy_id: policyId, policy_type: policyType, source_url: record.source_url }),
   };
 }
 
@@ -206,14 +208,15 @@ export function buildResearchChecklist(research: unknown): PriorAuthChecklistVie
     .map((policy): WidgetPolicy => {
       const name = str(policy.policy_name);
       const payer = str(policy.payer_name);
+      const policyId = name ?? payer ?? "Payer policy";
       return {
-        policy_id: name ?? payer ?? "Payer policy",
+        policy_id: policyId,
         title: name ?? str(policy.summary) ?? "Payer policy",
         policy_type: null,
         payer,
         jurisdiction: null,
         effective_date: str(policy.effective_date),
-        url: httpUrl(policy.policy_url),
+        link: policyLink({ policy_id: policyId, policy_type: null, source_url: policy.policy_url }),
       };
     })
     .slice(0, MAX_POLICIES);
