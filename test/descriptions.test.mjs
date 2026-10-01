@@ -47,6 +47,7 @@ test("every result schema offers provenance for citation", () => {
 const SELECTION_CASES = [
   ["Is CPT 76942 covered in Texas, and what procedure codes need prior authorization?", "backwork_coverage_lookup"],
   ["Search coverage policies and extracted criteria for oxygen therapy", "backwork_policy_research"],
+  ["Compare how Medicare contractors (MACs) cover 76942 side by side", "backwork_policy_research"],
   ["Validate claim denial risk and documentation requirements for 99213 with E11.9", "backwork_claim_validation"],
   ["Start payer website research on prior authorization and poll the research task", "backwork_prior_auth_research"],
   ["Does CVS Caremark require step therapy for Ozempic on its drug formulary?", "backwork_drug_formulary_research"],

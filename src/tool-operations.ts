@@ -20,6 +20,7 @@ export const TOOL_OPERATIONS = {
     criteria: ["searchCriteria"],
     changes: ["getPolicyChanges"],
     jurisdictions: ["listJurisdictions"],
+    compare: ["comparePolicies"],
   },
   claim_validation: {
     validate: ["validateClaims"],

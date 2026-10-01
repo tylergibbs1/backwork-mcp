@@ -24,6 +24,10 @@ import {
 import { codeSourceNote, parseCodeSources, type SourcedCode } from "./code-source.js";
 import { extractProvenance, formatProvenance, provenanceSchema } from "./provenance.js";
 import { TOOL_OPERATIONS } from "./tool-operations.js";
+import { minimizeEnvelope } from "./trace-fields.js";
+import type { WidgetKind, WidgetView } from "./widgets/schemas.js";
+import { registerWidgetResources, widgetOutputSchema, widgetToolMeta } from "./widgets/templates.js";
+import { buildCoverageCard, buildPolicyComparison, buildPriorAuthChecklist, buildResearchChecklist } from "./widgets/views.js";
 
 // Configuration
 const BACKWORK_API_BASE = process.env.BACKWORK_API_BASE || "https://backworkhealth.com/api/v1";
@@ -68,6 +72,8 @@ type BackworkToolConfig = {
   outputSchema?: BackworkToolInputSchema;
   annotations?: ToolAnnotations;
   _meta?: Record<string, unknown>;
+  /** The UI component that renders this tool's `structuredContent.widget` in MCP Apps hosts such as ChatGPT. */
+  widget?: WidgetKind;
 };
 type BackworkToolHandler = (args: any, extra: unknown) => CallToolResult | Promise<CallToolResult>;
 type RegisterBackworkTool = (name: string, config: BackworkToolConfig, handler: BackworkToolHandler) => void;
@@ -113,7 +119,6 @@ class BackworkApiError extends Error {
   code?: string;
   hint?: string;
   details?: unknown;
-  requestId?: string;
   upgradeTo?: string;
   requiredPlan?: string;
 
@@ -123,7 +128,6 @@ class BackworkApiError extends Error {
     code?: string;
     hint?: string;
     details?: unknown;
-    requestId?: string;
     upgradeTo?: string;
     requiredPlan?: string;
   }) {
@@ -133,7 +137,6 @@ class BackworkApiError extends Error {
     this.code = params.code;
     this.hint = params.hint;
     this.details = params.details;
-    this.requestId = params.requestId;
     this.upgradeTo = params.upgradeTo;
     this.requiredPlan = params.requiredPlan;
   }
@@ -416,20 +419,25 @@ async function backworkRequest<Id extends OperationId>(
   }
 
   if (!response.ok) {
+    // The request ID is for support, so it goes to the server log and never into tool output.
+    console.error(
+      `Backwork API ${operationId} failed: HTTP ${response.status}${data.error?.code ? ` ${data.error.code}` : ""}${
+        data.meta?.request_id ? ` request_id=${data.meta.request_id}` : ""
+      }`,
+    );
     throw new BackworkApiError({
       status: response.status,
       code: data.error?.code,
       message: data.error?.message || `API error: ${response.status}`,
       hint: data.error?.hint,
       details: data.error?.details,
-      requestId: data.meta?.request_id,
       upgradeTo: data.error?.upgrade_to,
       requiredPlan: data.error?.required_plan,
     });
   }
 
   if (data && typeof data === "object" && "data" in data) {
-    return { ...data, data: parseCodeSources(operationId, data.data) };
+    return minimizeEnvelope(operationId, { ...data, data: parseCodeSources(operationId, data.data) });
   }
   return data;
 }
@@ -510,8 +518,7 @@ function formatToolError(action: string, error: unknown): string {
     return [
       `Cannot ${action}: the Backwork API reports this endpoint is not available in production yet.`,
       "Do not retry. Use an available action or tell the user this data is not available.",
-      error.requestId ? `Request ID: ${error.requestId}` : null,
-    ].filter(Boolean).join("\n");
+    ].join("\n");
   }
   if (error instanceof BackworkApiError) {
     const details = error.details && typeof error.details === "object" ? (error.details as Record<string, unknown>) : {};
@@ -532,19 +539,17 @@ function formatToolError(action: string, error: unknown): string {
         `Cannot ${action}: this API key is authenticated but is not authorized for that operation.`,
         requirements.length ? `Required: ${requirements.join("; ")}.` : "Required: a higher-scope key or plan entitlement.",
         "Use a key with the required scope/plan, upgrade the organization, or choose a read-only tool for this workflow.",
-        error.requestId ? `Request ID: ${error.requestId}` : null,
       ].filter(Boolean).join("\n");
     }
 
     if (error.status === 401) {
-      return `Cannot ${action}: the API key was missing, invalid, revoked, or suspended.${error.requestId ? `\nRequest ID: ${error.requestId}` : ""}`;
+      return `Cannot ${action}: the API key was missing, invalid, revoked, or suspended.`;
     }
 
     return [
       `Error ${action}: ${error.message}`,
       error.hint ? `Hint: ${error.hint}` : null,
       error.code ? `Code: ${error.code}` : null,
-      error.requestId ? `Request ID: ${error.requestId}` : null,
     ].filter(Boolean).join("\n");
   }
 
@@ -819,7 +824,8 @@ function errorResult(message: string): CallToolResult {
   };
 }
 
-function toolResult(message: string, data?: unknown, meta?: unknown): CallToolResult {
+/** `widget` is the view model for the tool's UI component; it must match the component the tool declares. */
+function toolResult(message: string, data?: unknown, meta?: unknown, widget?: WidgetView): CallToolResult {
   const provenance = extractProvenance(data);
   const text = provenance ? `${message}\n\n${formatProvenance(provenance)}` : message;
   return {
@@ -829,6 +835,7 @@ function toolResult(message: string, data?: unknown, meta?: unknown): CallToolRe
       ...(meta !== undefined ? { meta } : {}),
       message,
       ...(provenance ? { provenance } : {}),
+      ...(widget ? { widget } : {}),
     },
   };
 }
@@ -879,14 +886,16 @@ function narrowActionInput(inputSchema: BackworkToolInputSchema | undefined, off
 function enhanceToolConfig(name: string, config: BackworkToolConfig, exposure: ActionExposure): BackworkToolConfig {
   const title = config.title || toolTitles[name] || titleizeToolName(name);
   const offeredOperations = exposure.offered.flatMap((action) => config.operations[action]);
+  const { widget, ...rest } = config;
+  const outputSchema = config.outputSchema || backworkToolOutputSchema;
   return {
-    ...config,
+    ...rest,
     title,
     description: enhanceDescription(name, config.description) + exposureNote(exposure.withheld),
     inputSchema: withResponseFormatInput(narrowActionInput(config.inputSchema, exposure.offered)),
-    outputSchema: config.outputSchema || backworkToolOutputSchema,
+    outputSchema: widget ? { ...outputSchema, widget: widgetOutputSchema(widget) } : outputSchema,
     annotations: config.annotations || toolAnnotations(name, offeredOperations),
-    _meta: config._meta,
+    _meta: widget ? { ...config._meta, ...widgetToolMeta(widget) } : config._meta,
   };
 }
 
@@ -1186,6 +1195,42 @@ function formatClaimValidation(result: any): string {
   return lines.join("\n");
 }
 
+function formatPolicyComparison(data: any): string {
+  const comparison: any[] = Array.isArray(data?.comparison) ? data.comparison : [];
+  const summary = data?.summary ?? {};
+  const codes: string[] = Array.isArray(summary.queried_codes) ? summary.queried_codes : [];
+  const lines = [`Policy Comparison${codes.length ? ` for ${codes.join(", ")}` : ""}`];
+  lines.push(`Jurisdictions analyzed: ${summary.total_jurisdictions ?? comparison.length}`);
+  lines.push(`With coverage: ${summary.jurisdictions_with_coverage ?? "unknown"}`);
+  lines.push(`Regional variation: ${summary.has_variation === undefined ? "unknown" : summary.has_variation ? "YES" : "NO"}`);
+  if (summary.unresolved_jurisdictions?.length) lines.push(`No active MAC: ${summary.unresolved_jurisdictions.join(", ")}`);
+
+  comparison.slice(0, 10).forEach((jurisdiction: any) => {
+    const counts = jurisdiction.coverage_summary ?? {};
+    lines.push(`\n${jurisdiction.jurisdiction}${jurisdiction.mac?.name ? ` (${jurisdiction.mac.name})` : ""}`);
+    lines.push(
+      `  Covered: ${counts.covered ?? 0}, prior auth: ${counts.requires_pa ?? 0}, conditional: ${counts.conditional ?? 0}, not covered: ${counts.not_covered ?? 0}`,
+    );
+    const policies: any[] = (jurisdiction.policies ?? []).filter((policy: any) => !policy.is_national);
+    policies.slice(0, 4).forEach((policy: any) => {
+      const codeList = (policy.codes ?? [])
+        .slice(0, 5)
+        .map((code: SourcedCode) => `${code.code} ${code.disposition}${codeSourceNote(code.source)}`)
+        .join("; ");
+      lines.push(`  - ${policy.policy_id}: ${cleanText(policy.title, 120)}${codeList ? ` [${codeList}]` : ""}`);
+    });
+    if (policies.length > 4) lines.push(`  ... ${policies.length - 4} more policies omitted`);
+  });
+  if (comparison.length > 10) lines.push(`\n... ${comparison.length - 10} more jurisdictions omitted`);
+
+  const national: any[] = Array.isArray(data?.national_policies) ? data.national_policies : [];
+  if (national.length) {
+    lines.push("\nNational policies (apply in every jurisdiction):");
+    national.slice(0, 5).forEach((policy: any) => lines.push(`  - ${policy.policy_id}: ${cleanText(policy.title, 120)}`));
+  }
+  return lines.join("\n");
+}
+
 function formatResearch(result: any): string {
   const lines: string[] = [];
   lines.push(`Research ID: ${result.research_id}`);
@@ -1216,6 +1261,7 @@ function registerWorkflowTools(registerTool: RegisterBackworkTool): void {
     "coverage_lookup",
     {
       operations: TOOL_OPERATIONS.coverage_lookup,
+      widget: "coverage_card",
       description: `Answer common coverage questions for procedure codes in one workflow.
 Use this when a user asks whether codes are covered, whether prior authorization is required, what policies support the answer, or how coverage differs by jurisdiction.
 This tool can combine code lookup, related policy evidence, Medicare prior-auth checks, claim-risk validation, jurisdiction comparison, and spending evidence so the agent does not need to chain endpoint-shaped tools.`,
@@ -1334,7 +1380,8 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
           lines.push(formatSpending(result.data));
         }
 
-        return toolResult(lines.join("\n"), data);
+        const card = data.code_details !== undefined || data.prior_auth !== undefined ? buildCoverageCard(procedure_codes, data) : undefined;
+        return toolResult(lines.join("\n"), data, undefined, card);
       } catch (error) {
         return errorResult(formatToolError("run coverage lookup", error));
       }
@@ -1345,10 +1392,11 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
     "policy_research",
     {
       operations: TOOL_OPERATIONS.policy_research,
+      widget: "policy_comparison",
       description: `Research coverage policies and criteria.
-Use this for policy search, fetching one policy by ID, searching extracted criteria, reviewing policy changes, or mapping state to MAC jurisdiction. This replaces several endpoint-shaped policy tools with one research workflow.`,
+Use this for policy search, fetching one policy by ID, searching extracted criteria, reviewing policy changes, mapping state to MAC jurisdiction, or comparing how Medicare contractors (MACs) cover the same procedure codes side by side. This replaces several endpoint-shaped policy tools with one research workflow.`,
       inputSchema: {
-        action: z.enum(["search", "get", "criteria", "changes", "jurisdictions"]).describe("Policy research action to perform"),
+        action: z.enum(["search", "get", "criteria", "changes", "jurisdictions", "compare"]).describe("Policy research action to perform"),
         query: z.string().max(500).optional().describe("Search text for policy or criteria research"),
         policy_id: z.string().max(80).optional().describe("Policy ID for action='get' or filtering changes"),
         policy_type: z.enum(["LCD", "Article", "NCD", "PayerPolicy", "Medical Policy", "Drug Policy"]).optional(),
@@ -1362,10 +1410,27 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
         include: includeSchema.describe("Extra policy data, e.g. ['criteria', 'codes']"),
         limit: z.number().int().min(1).max(50).default(10),
         cursor: z.string().optional(),
+        procedure_codes: z
+          .array(z.string().min(1).max(20))
+          .min(1)
+          .max(10)
+          .optional()
+          .describe("CPT/HCPCS codes to compare when action='compare', e.g. ['76942']"),
+        jurisdictions: z
+          .array(z.string().max(10))
+          .max(10)
+          .optional()
+          .describe("MAC jurisdictions to compare when action='compare', e.g. ['JM', 'JH']. Omit to compare all."),
       },
     },
-    async ({ action, query, policy_id, policy_type, jurisdiction, payer, status, mode, section, since, change_type, include, limit, cursor }) => {
+    async ({ action, query, policy_id, policy_type, jurisdiction, payer, status, mode, section, since, change_type, include, limit, cursor, procedure_codes, jurisdictions }) => {
       try {
+        if (action === "compare") {
+          if (!procedure_codes?.length) return toolError("procedure_codes is required when action='compare'.");
+          const result = await backworkRequest("comparePolicies", { body: { procedure_codes, jurisdictions } });
+          return toolResult(formatPolicyComparison(result.data), result.data, result.meta, buildPolicyComparison(procedure_codes, result.data));
+        }
+
         if (action === "search") {
           const result = await backworkRequest("listPolicies", {
             query: { q: query, mode, policy_type, jurisdiction, payer, status, limit, cursor, include: normalizeInclude(include) },
@@ -1488,6 +1553,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
     "prior_auth_research",
     {
       operations: TOOL_OPERATIONS.prior_auth_research,
+      widget: "prior_auth_checklist",
       description: "Check, start, or poll payer prior-authorization research without exposing separate task-management tools.",
       inputSchema: {
         action: z.enum(["check", "start_research", "get_research"]).describe("Use check for immediate Medicare PA evidence, start_research for payer website research, get_research to poll a research_id"),
@@ -1504,7 +1570,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
         if (action === "get_research") {
           if (!research_id) return toolError("research_id is required when action='get_research'.");
           const result = await backworkRequest("getPriorAuthResearch", { pathParams: { id: research_id } });
-          return toolResult(formatResearch(result.data), result.data, result.meta);
+          return toolResult(formatResearch(result.data), result.data, result.meta, buildResearchChecklist(result.data));
         }
 
         if (!procedure_codes?.length) return toolError("procedure_codes is required for prior authorization checks and research.");
@@ -1513,13 +1579,13 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
           const result = await backworkRequest("checkPriorAuth", {
             body: { procedure_codes, state: body.state },
           });
-          return toolResult(formatPriorAuth(result.data), result.data, result.meta);
+          return toolResult(formatPriorAuth(result.data), result.data, result.meta, buildPriorAuthChecklist(result.data));
         }
 
         const result = await backworkRequest("researchPriorAuth", {
           body: { ...body, procedure_codes },
         });
-        return toolResult(formatResearch(result.data), result.data, result.meta);
+        return toolResult(formatResearch(result.data), result.data, result.meta, buildResearchChecklist(result.data));
       } catch (error) {
         return errorResult(formatToolError("research prior auth", error));
       }
@@ -1686,6 +1752,7 @@ function createBackworkMcpServer(access: Scope): McpServer {
   });
 
   registerWorkflowTools(registerTool);
+  registerWidgetResources(server);
 
   return server;
 }

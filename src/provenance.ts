@@ -45,7 +45,8 @@ function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function httpUrl(value: unknown): string | null {
+/** The value as an http(s) URL, or null. */
+export function httpUrl(value: unknown): string | null {
   const candidate = text(value);
   if (!candidate) return null;
   try {
@@ -70,7 +71,8 @@ function isoDate(value: unknown): string | null {
   return Number.isNaN(new Date(`${day}T00:00:00Z`).getTime()) ? null : day;
 }
 
-function authorityOf(record: JsonRecord): string | null {
+/** Who issued a policy: "CMS" for Medicare policy types, otherwise the payer the record names. */
+export function authorityOf(record: JsonRecord): string | null {
   const explicit = text(record.authority);
   if (explicit) return explicit;
   const policyType = text(record.policy_type);
