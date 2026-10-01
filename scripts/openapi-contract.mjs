@@ -45,6 +45,10 @@ function hasPath(spec, schema, segments) {
   const [head, ...rest] = segments;
   return branches(spec, schema).some((branch) => {
     if (head === "[]") return branch.items !== undefined && hasPath(spec, branch.items, rest);
+    if (head === "*") {
+      const values = branch.additionalProperties;
+      return values !== undefined && values !== false && (rest.length === 0 || (typeof values === "object" && hasPath(spec, values, rest)));
+    }
     const property = branch.properties?.[head];
     if (property !== undefined) return hasPath(spec, property, rest);
     // A free-form object (record) can carry any key, but then nothing below it is declared.
@@ -53,12 +57,13 @@ function hasPath(spec, schema, segments) {
   });
 }
 
-function successDataSchema(spec, operation) {
+/** The schemas of `part` ("data" or "meta") across the operation's success responses. */
+function successSchemas(spec, operation, part) {
   const success = Object.entries(operation.responses ?? {}).filter(([status]) => /^2\d\d$/.test(status));
   return success
     .map(([, response]) => resolve(spec, response)?.content?.["application/json"]?.schema)
     .filter(Boolean)
-    .map((schema) => branches(spec, schema).find((branch) => branch.properties?.data)?.properties.data)
+    .map((schema) => branches(spec, schema).find((branch) => branch.properties?.[part])?.properties[part])
     .filter(Boolean);
 }
 
@@ -111,10 +116,15 @@ export function checkContract(spec, catalog) {
       if (bodySchema && !hasPath(spec, bodySchema, [name])) problems.push(`${where}: body field "${name}" is not accepted`);
     }
 
-    const dataSchemas = successDataSchema(spec, operation);
-    for (const read of entry.reads) {
-      if (!dataSchemas.some((schema) => hasPath(spec, schema, segmentsOf(read)))) {
-        problems.push(`${where}: reads data.${read}, which the success response does not declare`);
+    for (const [part, reads] of [
+      ["data", [...entry.reads, ...entry.readsForWriteAccess]],
+      ["meta", entry.metaReads],
+    ]) {
+      const schemas = successSchemas(spec, operation, part);
+      for (const read of reads) {
+        if (!schemas.some((schema) => hasPath(spec, schema, segmentsOf(read)))) {
+          problems.push(`${where}: reads ${part}.${read}, which the success response does not declare`);
+        }
       }
     }
 

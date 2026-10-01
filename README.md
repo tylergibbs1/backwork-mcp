@@ -287,7 +287,11 @@ Requires Node.js 18 or newer.
 
 Tool names use the `backwork_` prefix for discoverability when this server is installed alongside other MCP servers. The default surface is intentionally workflow-level rather than a 1:1 API wrapper, so agents see fewer choices and common tasks require fewer tool calls.
 
-All tools include `title`, `description`, `inputSchema`, `outputSchema`, and MCP annotations. Successful calls return readable text plus `structuredContent` with `message`, and when available, raw Backwork API `data` and `meta`. Request IDs and response timestamps are left out of tool results; the server logs the request ID of a failed API call. Tool-level failures return `isError: true`. For tools that combine read and write actions, annotations are conservative at the tool level.
+All tools include `title`, `description`, `inputSchema`, `outputSchema`, and MCP annotations. Each tool states its own annotations; the server refuses to start if a tool marked read-only offers a write-scope operation, or one marked non-destructive offers a `DELETE`. Successful calls return readable text plus `structuredContent` with `message`, and when available, Backwork API `data` and `meta`.
+
+`data` and `meta` are projections: they carry only the response fields `src/api-operations.ts` lists for the operation (`reads` and `metaReads`). Request IDs, response timestamps, record timestamps, research-job cost and polling URLs, idempotency keys, and model names are dropped. Policy effective and last-reviewed dates are kept. The server logs the request ID of a failed API call.
+
+Tool-level failures return `isError: true`. Billing and rate-limit failures are reported in plain terms and never repeat the API's hint, plan names, or pricing links: a feature outside the organization's plan, no remaining request credits, or a rate limit with when to retry. `test/output-guard.test.mjs` runs every tool action against fixture responses and those errors, and fails on upsell wording, trace IDs, timestamps, cost, or model fields.
 
 ### Sources and currency
 
@@ -308,20 +312,20 @@ Values are copied from the API response (`source_url`, `effective_date`, `last_v
 Which actions a server offers depends on two things:
 
 - **Availability.** The Backwork OpenAPI document can mark an operation `x-backwork-availability: unavailable-in-production`. Against the production API (`https://backworkhealth.com`) the server withholds those actions. None is marked today: production serves every `/api/v1` operation these tools call to an organization's live key.
-- **Access.** Operations that need `write` scope (`x-backwork-required-scopes`) are withheld from a read-only OAuth grant. On the hosted server this hides `backwork_webhook_management` and the `acknowledge` and `bulk_acknowledge` actions of `backwork_compliance_review`. A Backwork API key is offered every action, and the API enforces the key's own scopes.
+- **Access.** Operations that need `write` scope (`x-backwork-required-scopes`) are withheld from a read-only OAuth grant. On the hosted server this hides `backwork_webhook_management` and the `acknowledge` and `bulk_acknowledge` actions of `backwork_compliance_review`. A read-only connection also gets no `backwork_system_health` diagnostics, no `idempotency_key` input on `backwork_claim_validation`, and a `backwork_compliance_review` with no acknowledgment inputs (`diff_id`, `diff_ids`, `notes`) and no diff IDs in its results. A Backwork API key (stdio, or HTTP with a `bwk_` bearer) is offered every tool and action, and the API enforces the key's own scopes. An OAuth grant counts as read-only unless its scopes include `write`.
 
-A tool with no offered action is hidden. A partly offered tool drops the withheld actions from its `action` input and names them in its description. A server pointed at another Backwork deployment with `BACKWORK_API_BASE` ignores availability markers, and `BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS=true` does the same against production. Neither lifts the write-scope rule.
+A tool with no offered action is hidden. A partly offered tool drops the withheld actions from its `action` input; actions withheld as unavailable in production are also named in its description. A server pointed at another Backwork deployment with `BACKWORK_API_BASE` ignores availability markers, and `BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS=true` does the same against production. Neither lifts the write-scope rule.
 
 | Primary tool | Purpose |
 | --- | --- |
 | `backwork_coverage_lookup` | Look up procedure codes and combine code details, policy evidence, prior authorization, claim risk, jurisdiction comparison, and spending evidence |
 | `backwork_policy_research` | Search policies, fetch one policy, search extracted criteria, review policy changes, map MAC jurisdictions, or compare how MACs cover the same codes |
 | `backwork_claim_validation` | Validate claim coverage, documentation requirements, denial risk, and optional policy-specific criteria |
-| `backwork_prior_auth_research` | Check Medicare prior authorization, start payer website research, or poll an async research task |
+| `backwork_prior_auth_research` | Check prior authorization from Backwork's policies (Medicare, or a named payer's), or start and poll a background job that searches public payer websites |
 | `backwork_drug_formulary_research` | Search commercial pharmacy-benefit evidence from CVS Caremark, Express Scripts, and UnitedHealthcare / Optum Rx |
-| `backwork_compliance_review` | Review compliance stats, list unreviewed policy changes, or acknowledge changes |
+| `backwork_compliance_review` | Review compliance stats and list unreviewed policy changes; with an API key, also acknowledge changes |
 | `backwork_webhook_management` | List, create, update, delete, or test webhook endpoints. Backwork sends one event, `compliance.acknowledged`; policy-change webhooks are not sent. Needs a write-scoped API key |
-| `backwork_system_health` | Check Backwork API health and dependency status |
+| `backwork_system_health` | Check Backwork API health and dependency status. API-key connections only |
 
 ### Response Format
 
