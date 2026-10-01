@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 /**
- * The view models the three UI components render. A tool that has a component
+ * The view models the UI components render. A tool that has a component
  * returns one of these as `structuredContent.widget`; its outputSchema declares
- * the matching schema, so the MCP SDK rejects a result whose view does not fit.
+ * the views its component renders, so the MCP SDK rejects a result whose view
+ * does not fit.
  */
 
 const codeSourceKind = z.enum(["document", "inferred_title_match", "unrecognized"]);
@@ -101,17 +102,137 @@ export const policyComparisonSchema = z
   })
   .describe("Policy comparison table: the requested codes side by side across Medicare contractors (MACs).");
 
+const policyStatus = z.enum(["active", "retired"]).nullable();
+
+// The list views below hold at least one item: a response with nothing to show
+// has no view, so the component collapses instead of rendering an empty card.
+
+export const policyListSchema = z
+  .object({
+    kind: z.literal("policy_list"),
+    query: z.string().nullable(),
+    policies: z.array(widgetPolicySchema.extend({ status: policyStatus, summary: z.string().nullable() })).nonempty(),
+    /** Policies in this response that the card leaves out, plus whether the API has another page. */
+    policies_omitted: z.number().int().nonnegative(),
+    has_more: z.boolean(),
+  })
+  .describe("Policy search results: each policy's payer, title, number, effective date and link.");
+
+export const policyDetailSchema = z
+  .object({
+    kind: z.literal("policy_detail"),
+    policy: widgetPolicySchema.extend({
+      status: policyStatus,
+      last_reviewed_date: z.string().nullable(),
+      summary: z.string().nullable(),
+    }),
+    /** The first criteria excerpt of each section, e.g. indications. */
+    criteria: z.array(z.object({ section: z.string(), text: z.string(), more: z.number().int().nonnegative() })),
+    codes: z.array(widgetCodeSchema.extend({ display: z.string().nullable() })),
+    codes_omitted: z.number().int().nonnegative(),
+  })
+  .describe("One policy: summary, criteria excerpts by section, its codes with dispositions, and a link.");
+
+export const criteriaListSchema = z
+  .object({
+    kind: z.literal("criteria_list"),
+    query: z.string().nullable(),
+    items: z.array(
+      z.object({
+        section: z.string(),
+        text: z.string(),
+        policy: widgetPolicySchema,
+      }),
+    )
+    .nonempty(),
+    items_omitted: z.number().int().nonnegative(),
+    has_more: z.boolean(),
+  })
+  .describe("Coverage criteria search results: each excerpt with its section and the policy it comes from.");
+
+export const policyChangesSchema = z
+  .object({
+    kind: z.literal("policy_changes"),
+    changes: z.array(
+      z.object({
+        change_type: z.string(),
+        policy_id: z.string(),
+        policy_title: z.string(),
+        payer: z.string().nullable(),
+        /** YYYY-MM-DD */
+        changed_on: z.string().nullable(),
+        summary: z.string().nullable(),
+      }),
+    )
+    .nonempty(),
+    changes_omitted: z.number().int().nonnegative(),
+    has_more: z.boolean(),
+  })
+  .describe("Recent policy changes: what changed, in which policy, and when.");
+
+export const jurisdictionListSchema = z
+  .object({
+    kind: z.literal("jurisdiction_list"),
+    jurisdictions: z.array(
+      z.object({
+        code: z.string(),
+        name: z.string().nullable(),
+        mac: z.string().nullable(),
+        states: z.array(z.string()),
+        website: z.string().nullable(),
+      }),
+    )
+    .nonempty(),
+    jurisdictions_omitted: z.number().int().nonnegative(),
+  })
+  .describe("Medicare contractor (MAC) jurisdictions and the states each covers.");
+
 export type WidgetCode = z.infer<typeof widgetCodeSchema>;
 export type WidgetPolicy = z.infer<typeof widgetPolicySchema>;
 export type CoverageCardView = z.infer<typeof coverageCardSchema>;
 export type PriorAuthChecklistView = z.infer<typeof priorAuthChecklistSchema>;
 export type ComparisonCell = z.infer<typeof comparisonCellSchema>;
 export type PolicyComparisonView = z.infer<typeof policyComparisonSchema>;
-export type WidgetView = CoverageCardView | PriorAuthChecklistView | PolicyComparisonView;
-export type WidgetKind = WidgetView["kind"];
+export type PolicyListView = z.infer<typeof policyListSchema>;
+export type PolicyDetailView = z.infer<typeof policyDetailSchema>;
+export type CriteriaListView = z.infer<typeof criteriaListSchema>;
+export type PolicyChangesView = z.infer<typeof policyChangesSchema>;
+export type JurisdictionListView = z.infer<typeof jurisdictionListSchema>;
 
-export const WIDGET_SCHEMAS = {
+export type WidgetView =
+  | CoverageCardView
+  | PriorAuthChecklistView
+  | PolicyComparisonView
+  | PolicyListView
+  | PolicyDetailView
+  | CriteriaListView
+  | PolicyChangesView
+  | JurisdictionListView;
+export type ViewKind = WidgetView["kind"];
+
+export const VIEW_SCHEMAS = {
   coverage_card: coverageCardSchema,
   prior_auth_checklist: priorAuthChecklistSchema,
   policy_comparison: policyComparisonSchema,
-} as const satisfies Record<WidgetKind, z.ZodTypeAny>;
+  policy_list: policyListSchema,
+  policy_detail: policyDetailSchema,
+  criteria_list: criteriaListSchema,
+  policy_changes: policyChangesSchema,
+  jurisdiction_list: jurisdictionListSchema,
+} as const satisfies { [K in ViewKind]: z.ZodType<Extract<WidgetView, { kind: K }>, z.ZodTypeDef, unknown> };
+
+/**
+ * The UI components and the views each renders. A tool names one component;
+ * ChatGPT and other MCP Apps hosts load that component for every call of the
+ * tool, so a component must render every view the tool returns. A result with
+ * no view (an empty search, an error) collapses the component to nothing.
+ */
+export const COMPONENT_VIEWS = {
+  coverage_card: ["coverage_card"],
+  prior_auth_checklist: ["prior_auth_checklist"],
+  policy_research: ["policy_comparison", "policy_list", "policy_detail", "criteria_list", "policy_changes", "jurisdiction_list"],
+} as const satisfies Record<string, readonly [ViewKind, ...ViewKind[]]>;
+
+export type ComponentKind = keyof typeof COMPONENT_VIEWS;
+/** The views a component renders, e.g. ComponentView<"policy_research">. */
+export type ComponentView<C extends ComponentKind> = Extract<WidgetView, { kind: (typeof COMPONENT_VIEWS)[C][number] }>;

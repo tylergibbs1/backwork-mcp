@@ -1,10 +1,15 @@
 import { codeSourceLabel, parseCodeSource } from "../code-source.js";
 import { policyLink } from "../policy-links.js";
-import { authorityOf } from "../provenance.js";
+import { authorityOf, httpUrl } from "../provenance.js";
 import type {
   ComparisonCell,
   CoverageCardView,
+  CriteriaListView,
+  JurisdictionListView,
+  PolicyChangesView,
   PolicyComparisonView,
+  PolicyDetailView,
+  PolicyListView,
   PriorAuthChecklistView,
   WidgetCode,
   WidgetPolicy,
@@ -13,13 +18,20 @@ import type {
 /**
  * Builds the UI components' view models from Backwork API response data. This
  * is the parse boundary for the components: API data is untyped here, and
- * every builder returns a value that fits its schema in ./schemas.ts.
+ * every builder returns a value that fits its schema in ./schemas.ts. A
+ * builder returns null when the response has nothing to show, so the result
+ * carries no view and the component collapses instead of showing an empty card.
  */
 
 const MAX_POLICIES = 8;
 const MAX_CODES_PER_POLICY = 20;
 const MAX_COLUMNS = 6;
 const MAX_LIST_ITEMS = 12;
+const MAX_RESULTS = 8;
+const MAX_CRITERIA = 6;
+const MAX_JURISDICTIONS = 20;
+const SUMMARY_CHARS = 280;
+const EXCERPT_CHARS = 240;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -38,6 +50,25 @@ function str(value: unknown): string | null {
 
 function strings(value: unknown, limit = MAX_LIST_ITEMS): string[] {
   return (Array.isArray(value) ? value : []).map(str).filter((item): item is string => item !== null).slice(0, limit);
+}
+
+/** Collapses whitespace and cuts at a word boundary, so long policy text stays a compact excerpt. */
+function excerpt(value: unknown, limit: number): string | null {
+  const text = str(value)?.replace(/\s+/g, " ");
+  if (!text || text.length <= limit) return text ?? null;
+  const cut = text.slice(0, limit);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), limit - 20)).replace(/[\s,;:.]+$/, "")}…`;
+}
+
+/** The date part of an ISO date or timestamp. */
+function isoDay(value: unknown): string | null {
+  const text = str(value);
+  return text && /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : null;
+}
+
+function policyStatus(value: unknown): "active" | "retired" | null {
+  const status = str(value);
+  return status === "active" || status === "retired" ? status : null;
 }
 
 function bool(value: unknown): boolean | null {
@@ -306,4 +337,115 @@ export function buildPolicyComparison(codesRequested: string[], compare: unknown
     unresolved_jurisdictions: strings(summary.unresolved_jurisdictions),
     columns_omitted: Math.max(0, jurisdictions.length - MAX_COLUMNS),
   };
+}
+
+/** The first `limit` items and how many were left out, or null when there are none. */
+function shown<T>(items: T[], limit: number): { items: [T, ...T[]]; omitted: number } | null {
+  const [first, ...rest] = items;
+  if (first === undefined) return null;
+  return { items: [first, ...rest.slice(0, limit - 1)], omitted: Math.max(0, items.length - limit) };
+}
+
+function hasMore(meta: unknown): boolean {
+  return isRecord(meta) && isRecord(meta.pagination) && meta.pagination.has_more === true;
+}
+
+/** From a policy search (`GET /policies`). */
+export function buildPolicyList(query: string | undefined, list: unknown, meta: unknown): PolicyListView | null {
+  const policies = records(list)
+    .map((record) => {
+      const policy = widgetPolicy(record);
+      return policy && { ...policy, status: policyStatus(record.status), summary: excerpt(record.summary, SUMMARY_CHARS) };
+    })
+    .filter((policy) => policy !== null);
+  const page = shown(policies, MAX_RESULTS);
+  return page && { kind: "policy_list", query: str(query), policies: page.items, policies_omitted: page.omitted, has_more: hasMore(meta) };
+}
+
+/** From one policy (`GET /policies/{id}`). */
+export function buildPolicyDetail(detail: unknown): PolicyDetailView | null {
+  const data = isRecord(detail) ? detail : {};
+  const policy = widgetPolicy(data);
+  if (!policy) return null;
+
+  const criteria = Object.entries(isRecord(data.criteria) ? data.criteria : {})
+    .map(([section, blocks]) => {
+      const texts = records(blocks)
+        .map((block) => excerpt(block.text, EXCERPT_CHARS))
+        .filter((text) => text !== null);
+      const [first] = texts;
+      return first ? { section, text: first, more: texts.length - 1 } : null;
+    })
+    .filter((entry) => entry !== null);
+
+  const codes = Object.entries(isRecord(data.codes) ? data.codes : {}).flatMap(([system, entries]) =>
+    records(entries).flatMap((entry) => {
+      const code = str(entry.code);
+      return code ? [{ ...widgetCode(code, entry, system), display: excerpt(entry.display, 80) }] : [];
+    }),
+  );
+
+  const macName = isRecord(data.mac) ? str(data.mac.name) : null;
+  return {
+    kind: "policy_detail",
+    policy: {
+      ...policy,
+      payer: policy.payer ?? macName,
+      status: policyStatus(data.status),
+      last_reviewed_date: str(data.last_reviewed_date),
+      summary: excerpt(data.summary ?? data.description, SUMMARY_CHARS * 2),
+    },
+    criteria: criteria.slice(0, MAX_CRITERIA),
+    codes: codes.slice(0, MAX_LIST_ITEMS),
+    codes_omitted: Math.max(0, codes.length - MAX_LIST_ITEMS),
+  };
+}
+
+/** From a criteria search (`GET /coverage/criteria`). */
+export function buildCriteriaList(query: string | undefined, list: unknown, meta: unknown): CriteriaListView | null {
+  const items = records(list).flatMap((record) => {
+    const nested = isRecord(record.policy) ? record.policy : {};
+    const text = excerpt(record.text, EXCERPT_CHARS);
+    const policy = widgetPolicy({
+      ...record,
+      policy_id: record.policy_id ?? nested.policy_id,
+      title: record.policy_title ?? nested.title,
+      public_url: nested.public_url,
+    });
+    return text && policy ? [{ section: str(record.section) ?? "other", text, policy }] : [];
+  });
+  const page = shown(items, MAX_CRITERIA);
+  return page && { kind: "criteria_list", query: str(query), items: page.items, items_omitted: page.omitted, has_more: hasMore(meta) };
+}
+
+/** From the policy change feed (`GET /policies/changes`). */
+export function buildPolicyChanges(list: unknown, meta: unknown): PolicyChangesView | null {
+  const changes = records(list).flatMap((record) => {
+    const policyId = str(record.policy_id);
+    if (!policyId) return [];
+    return [
+      {
+        change_type: str(record.change_type) ?? "updated",
+        policy_id: policyId,
+        policy_title: str(record.policy_title) ?? policyId,
+        payer: authorityOf(record),
+        changed_on: isoDay(record.changed_at),
+        summary: excerpt(record.change_summary, EXCERPT_CHARS),
+      },
+    ];
+  });
+  const page = shown(changes, MAX_RESULTS);
+  return page && { kind: "policy_changes", changes: page.items, changes_omitted: page.omitted, has_more: hasMore(meta) };
+}
+
+/** From the MAC jurisdiction list (`GET /jurisdictions`). */
+export function buildJurisdictionList(list: unknown): JurisdictionListView | null {
+  const jurisdictions = records(list).flatMap((record) => {
+    const code = str(record.jurisdiction_code);
+    return code
+      ? [{ code, name: str(record.jurisdiction_name), mac: str(record.mac_name), states: strings(record.states, 60), website: httpUrl(record.website_url) }]
+      : [];
+  });
+  const page = shown(jurisdictions, MAX_JURISDICTIONS);
+  return page && { kind: "jurisdiction_list", jurisdictions: page.items, jurisdictions_omitted: page.omitted };
 }

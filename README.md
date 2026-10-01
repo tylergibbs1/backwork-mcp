@@ -158,7 +158,9 @@ After a server update, open the connection at [chatgpt.com/plugins](https://chat
 | --- | --- | --- |
 | `backwork_coverage_lookup` | Coverage result | Each policy that lists the codes: payer (`CMS` for Medicare policies), title and number, effective date, a row per code with its disposition badge and source label, and an **Open policy** link to the policy's Backwork page (Medicare LCDs, Articles, and NCDs) or, for other policies, its source document |
 | `backwork_prior_auth_research` | Prior-auth checklist | The determination and confidence, codes that require prior auth, documentation to gather, known gaps, and numbered citations. A started research task shows as pending until you ask again |
-| `backwork_policy_research` (`action: "compare"`) | Policy comparison | The codes side by side across Medicare contractors (MACs), one column per jurisdiction, with each cell's disposition and policy, and a coverage count per column |
+| `backwork_policy_research` | Policy research | Per action: `compare` shows the codes side by side across Medicare contractors (MACs), one column per jurisdiction, with each cell's disposition and policy, and a coverage count per column; `search` lists the matching policies with payer, number, effective date, a short summary and a link; `get` shows one policy's summary, a criteria excerpt per section, and its codes; `criteria` lists the matching criteria excerpts with their policies; `changes` lists recent changes; `jurisdictions` lists each MAC and its states |
+
+ChatGPT loads a tool's card for every call of that tool. A result with nothing to show, such as a search with no matches or an error, collapses the card to zero height and asks ChatGPT to close it, so no empty card is left in the conversation.
 
 A code that a policy lists only because its title names the drug is labelled **Inferred from policy title**, in the card and in the text. Confirm it against the document before relying on it.
 
@@ -365,7 +367,7 @@ Run the build and MCP metadata smoke test:
 npm test
 ```
 
-The smoke test starts the built stdio server with a dummy key, verifies the 8 workflow tools, checks titles, schemas, annotations, output schemas, `response_format`, and verifies local validation failures are reported with `isError: true`. The `test/` suite covers production availability, the hosted server's OAuth-only, read-only tool set, provenance, description quality and a lexical tool-selection check (no model calls), the registry manifest, and the ChatGPT cards: their templates in the tool list, the resources and mime type, each card's `structuredContent` against its schema, markdown for clients without UI, and a render of each card page in a stub browser.
+The smoke test starts the built stdio server with a dummy key, verifies the 8 workflow tools, checks titles, schemas, annotations, output schemas, `response_format`, and verifies local validation failures are reported with `isError: true`. The `test/` suite covers production availability, the hosted server's OAuth-only, read-only tool set, provenance, description quality and a lexical tool-selection check (no model calls), the registry manifest, and the ChatGPT cards: their templates in the tool list, the resources and mime type, each card's `structuredContent` against its schema, markdown for clients without UI, and a render of each card page in a stub browser for every action of every tool with a card, which must show a card or collapse to zero height.
 
 ### API contract
 
