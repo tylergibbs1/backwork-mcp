@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "backwork": {
+      "type": "http",
+      "url": "https://backworkhealth.com/mcp"
+    }
+  }
+}

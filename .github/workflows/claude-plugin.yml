@@ -1,0 +1,27 @@
+name: Claude plugin
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      # The authoritative schema check for marketplace.json, plugin.json, and
+      # .mcp.json. 2.1.281 is the first release that validates plugin MCP entries.
+      # --strict fails on warnings such as unknown fields.
+      - run: npx -y @anthropic-ai/claude-code@^2.1.281 plugin validate . --strict
+      - run: npx -y @anthropic-ai/claude-code@^2.1.281 plugin validate ./plugins/backwork --strict

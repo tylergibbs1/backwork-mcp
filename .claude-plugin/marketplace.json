@@ -1,0 +1,18 @@
+{
+  "name": "backwork",
+  "description": "Backwork payer coverage-policy intelligence for Claude: Medicare and commercial medical policy, prior authorization, and claim appeal research.",
+  "owner": {
+    "name": "Backwork LLC",
+    "email": "support@backworkhealth.com",
+    "url": "https://backworkhealth.com"
+  },
+  "plugins": [
+    {
+      "name": "backwork",
+      "source": "./plugins/backwork",
+      "description": "Research payer coverage, prior authorization, policy changes, and denial appeals with cited Medicare and commercial payer policies.",
+      "category": "healthcare",
+      "tags": ["prior-authorization", "medical-policy", "medicare", "payer", "coverage", "appeals"]
+    }
+  ]
+}
