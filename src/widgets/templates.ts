@@ -1,7 +1,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { renderWidget, widgetRuntime } from "./render.js";
-import { WIDGET_SCHEMAS, type WidgetKind } from "./schemas.js";
+import { z } from "zod";
+
+import { COMPONENT_VIEWS, VIEW_SCHEMAS, type ComponentKind } from "./schemas.js";
 
 /**
  * The UI components, served as MCP Apps resources
@@ -23,9 +25,9 @@ type WidgetDefinition = {
   invoked: string;
 };
 
-export const WIDGETS: Record<WidgetKind, WidgetDefinition> = {
+export const WIDGETS: Record<ComponentKind, WidgetDefinition> = {
   coverage_card: {
-    uri: "ui://backwork/coverage-card-v1.html",
+    uri: "ui://backwork/coverage-card-v2.html",
     title: "Coverage result card",
     description:
       "Shows each policy that lists the requested codes: payer, policy title and number, effective date, each code's disposition and whether the document lists it or it was inferred from the policy title, and a link to the policy.",
@@ -33,18 +35,18 @@ export const WIDGETS: Record<WidgetKind, WidgetDefinition> = {
     invoked: "Coverage checked",
   },
   prior_auth_checklist: {
-    uri: "ui://backwork/prior-auth-checklist-v1.html",
+    uri: "ui://backwork/prior-auth-checklist-v2.html",
     title: "Prior authorization checklist",
     description:
       "Shows the prior-authorization determination, the codes that require it, the documentation to gather, known gaps including codes inferred from a policy title, and citations.",
     invoking: "Researching prior authorization…",
     invoked: "Prior authorization researched",
   },
-  policy_comparison: {
-    uri: "ui://backwork/policy-comparison-v1.html",
-    title: "Policy comparison table",
+  policy_research: {
+    uri: "ui://backwork/policy-research-v1.html",
+    title: "Policy research card",
     description:
-      "Shows the requested codes side by side across Medicare contractors (MACs): each code's disposition per jurisdiction, coverage counts, and links to the policies.",
+      "Shows the policy research result: a comparison table of the codes across Medicare contractors (MACs), a policy search result list, one policy's summary with criteria excerpts and codes, matching coverage criteria, recent policy changes, or the MAC jurisdictions, with links to the policies.",
     invoking: "Researching policies…",
     invoked: "Policies researched",
   },
@@ -58,8 +60,14 @@ const STYLES = `
 @media (prefers-color-scheme:dark){:root:not([data-theme]){--bw-text:var(--color-text-primary,#ececec);--bw-muted:var(--color-text-secondary,#b4b4b4);--bw-border:var(--color-border-primary,rgba(255,255,255,.14));--bw-surface:var(--color-background-secondary,rgba(255,255,255,.04));--bw-link:#8ab4f8;--bw-flag:#ffc46b;
 --b-covered-bg:rgba(52,168,83,.2);--b-covered:#9be0b0;--b-denied-bg:rgba(240,82,82,.2);--b-denied:#f8b4b4;--b-pa-bg:rgba(255,170,0,.18);--b-pa:#ffd28a;--b-conditional-bg:rgba(66,133,244,.22);--b-conditional:#b3cdfb;--b-neutral-bg:rgba(255,255,255,.1);--b-neutral:#d0d0d0}}
 *{box-sizing:border-box}
-html,body{margin:0;background:transparent;color:var(--bw-text);font:14px/1.45 var(--font-sans,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif)}
+html,body{margin:0;min-height:0;background:transparent;color:var(--bw-text);font:14px/1.45 var(--font-sans,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif)}
 .card{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+#root:empty{display:none}
+.items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.items>li{border-top:1px solid var(--bw-border);padding:8px 0;display:flex;flex-direction:column;gap:2px}
+.items>li:first-child{border-top:0;padding-top:0}
+.row{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
+.excerpt{font-size:13px}
 header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px}
 h2{font-size:15px;font-weight:600;margin:0}
 h3{font-size:14px;font-weight:600;margin:0 0 4px}
@@ -105,7 +113,7 @@ function inlineScript(code: string): string {
 }
 
 /** The complete HTML document for a component: styles and script inline, no external requests. */
-export function widgetHtml(kind: WidgetKind): string {
+export function widgetHtml(kind: ComponentKind): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -116,13 +124,13 @@ export function widgetHtml(kind: WidgetKind): string {
 </head>
 <body>
 <div id="root" aria-live="polite"></div>
-<script>${inlineScript(`(${widgetRuntime.toString()})(${JSON.stringify(kind)}, ${renderWidget.toString()});`)}</script>
+<script>${inlineScript(`(${widgetRuntime.toString()})(${JSON.stringify(kind)}, ${JSON.stringify(COMPONENT_VIEWS[kind])}, ${renderWidget.toString()});`)}</script>
 </body>
 </html>`;
 }
 
 /** Resource `_meta`: the components load nothing from the network, so every CSP allowlist is empty. */
-function resourceMeta(kind: WidgetKind): Record<string, unknown> {
+function resourceMeta(kind: ComponentKind): Record<string, unknown> {
   return {
     ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } },
     // ChatGPT compatibility aliases (https://developers.openai.com/plugins/reference#component-resource-_meta-fields).
@@ -135,7 +143,7 @@ function resourceMeta(kind: WidgetKind): Record<string, unknown> {
 }
 
 export function registerWidgetResources(server: McpServer): void {
-  for (const kind of Object.keys(WIDGETS) as WidgetKind[]) {
+  for (const kind of Object.keys(WIDGETS) as ComponentKind[]) {
     const widget = WIDGETS[kind];
     server.registerResource(
       `backwork-${kind.replace(/_/g, "-")}`,
@@ -149,7 +157,7 @@ export function registerWidgetResources(server: McpServer): void {
 }
 
 /** Tool descriptor `_meta` that links a tool to its component. */
-export function widgetToolMeta(kind: WidgetKind): Record<string, unknown> {
+export function widgetToolMeta(kind: ComponentKind): Record<string, unknown> {
   const widget = WIDGETS[kind];
   return {
     ui: { resourceUri: widget.uri },
@@ -160,6 +168,8 @@ export function widgetToolMeta(kind: WidgetKind): Record<string, unknown> {
 }
 
 /** The tool's outputSchema entry for the component's view model. */
-export function widgetOutputSchema(kind: WidgetKind) {
-  return WIDGET_SCHEMAS[kind].optional();
+/** The tool's outputSchema entry: any view its component renders, or none (the component then collapses). */
+export function widgetOutputSchema(kind: ComponentKind): z.ZodTypeAny {
+  const [first, second, ...rest]: z.ZodTypeAny[] = COMPONENT_VIEWS[kind].map((view) => VIEW_SCHEMAS[view]);
+  return (second ? z.union([first, second, ...rest]) : first).optional();
 }

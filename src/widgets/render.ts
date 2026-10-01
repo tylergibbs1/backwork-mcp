@@ -1,4 +1,4 @@
-import type { WidgetKind, WidgetView } from "./schemas.js";
+import type { ComponentKind, ViewKind, WidgetView } from "./schemas.js";
 
 /**
  * Code that runs inside the component iframe. Both functions are inlined into
@@ -13,11 +13,17 @@ declare global {
       theme?: string;
       toolOutput?: unknown;
       openExternal?: (options: { href: string }) => unknown;
+      notifyIntrinsicHeight?: (height: number) => unknown;
+      requestClose?: () => unknown;
     };
   }
 }
 
-/** Renders a view model to HTML. Every string from the view is escaped; only http(s) links are emitted. */
+/**
+ * Renders a view model to HTML. Every string from the view is escaped; only
+ * http(s) links are emitted. Every view renders a non-empty card: a view with
+ * nothing to show is never built (see ./views.ts).
+ */
 export function renderWidget(view: WidgetView): string {
   const esc = (value: unknown): string =>
     String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
@@ -51,6 +57,16 @@ export function renderWidget(view: WidgetView): string {
   const list = (items: string[], ordered = false): string =>
     items.length ? `<${ordered ? "ol" : "ul"} class="list">${items.map((item) => `<li>${item}</li>`).join("")}</${ordered ? "ol" : "ul"}>` : "";
   const more = (count: number, noun: string): string => (count > 0 ? `<p class="muted">${count} more ${noun} not shown. Ask for a narrower search to see them.</p>` : "");
+  const morePages = (count: number, hasMore: boolean, noun: string): string =>
+    count > 0 ? more(count, noun) : hasMore ? `<p class="muted">More ${noun} available. Ask for the next page to see them.</p>` : "";
+  const titleCase = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1).replace(/_/g, " ");
+  const retired = (status: string | null): string => (status === "retired" ? ' <span class="tag">Retired</span>' : "");
+  /** `title` is HTML; escape what goes into it. */
+  const card = (label: string, title: string, body: string): string =>
+    `<article class="card" aria-label="${esc(label)}">
+<header><h2>${title}</h2></header>
+${body}
+</article>`;
 
   if (view.kind === "coverage_card") {
     const pa = view.prior_auth;
@@ -121,6 +137,98 @@ ${section("Citations", list(citations, true))}
 </article>`;
   }
 
+  if (view.kind === "policy_list") {
+    const items = view.policies.map(
+      (policy) => `<li>
+<p class="eyebrow">${esc(join([policy.payer, policy.jurisdiction, policy.policy_type]))}</p>
+<p class="row"><strong>${esc(policy.title)}</strong>${retired(policy.status)}</p>
+<p class="muted">${esc(join([`Policy ${policy.policy_id}`, policy.effective_date && `Effective ${policy.effective_date}`]))}</p>
+${policy.summary ? `<p class="excerpt">${esc(policy.summary)}</p>` : ""}${link(policy)}
+</li>`,
+    );
+    return card(
+      "Backwork policy search results",
+      view.query ? `Policies matching “${esc(view.query)}”` : "Policies",
+      `<ul class="items">${items.join("")}</ul>${morePages(view.policies_omitted, view.has_more, "policies")}`,
+    );
+  }
+
+  if (view.kind === "policy_detail") {
+    const policy = view.policy;
+    const criteria = view.criteria
+      .map(
+        (entry) =>
+          `<li><span class="eyebrow">${esc(titleCase(entry.section))}</span><span class="excerpt">${esc(entry.text)}${
+            entry.more ? ` <span class="muted">+${entry.more} more</span>` : ""
+          }</span></li>`,
+      )
+      .join("");
+    const codes = view.codes
+      .map(
+        (code) =>
+          `<li><span class="code">${esc(code.code)}</span>${badge(code.disposition)}${code.display ? `<span class="muted">${esc(code.display)}</span>` : ""}${
+            code.source === "document" ? "" : sourceLabel(code.source, code.source_label)
+          }</li>`,
+      )
+      .join("");
+    return `<article class="card" aria-label="Backwork policy">
+<div><p class="eyebrow">${esc(join([policy.payer, policy.jurisdiction, policy.policy_type]))}</p>
+<header><h2>${esc(policy.title)}</h2>${retired(policy.status)}</header>
+<p class="muted">${esc(
+      join([`Policy ${policy.policy_id}`, policy.effective_date && `Effective ${policy.effective_date}`, policy.last_reviewed_date && `Reviewed ${policy.last_reviewed_date}`]),
+    )}</p></div>
+${policy.summary ? `<p class="reason">${esc(policy.summary)}</p>` : ""}
+${section("Criteria", criteria ? `<ul class="items">${criteria}</ul>` : "")}
+${section("Codes", codes ? `<ul class="codes">${codes}</ul>${more(view.codes_omitted, "codes")}` : "")}
+${link(policy)}
+</article>`;
+  }
+
+  if (view.kind === "criteria_list") {
+    const items = view.items.map(
+      (item) => `<li>
+<p class="row"><span class="tag">${esc(titleCase(item.section))}</span><span class="muted">${esc(join([item.policy.policy_id, item.policy.payer, item.policy.jurisdiction]))}</span></p>
+<p class="excerpt">${esc(item.text)}</p>
+<p class="muted">${link(item.policy, item.policy.title) || esc(item.policy.title)}</p>
+</li>`,
+    );
+    return card(
+      "Backwork coverage criteria",
+      view.query ? `Criteria matching “${esc(view.query)}”` : "Coverage criteria",
+      `<ul class="items">${items.join("")}</ul>${morePages(view.items_omitted, view.has_more, "criteria")}`,
+    );
+  }
+
+  if (view.kind === "policy_changes") {
+    const items = view.changes.map(
+      (change) => `<li>
+<p class="row"><span class="tag">${esc(titleCase(change.change_type))}</span><span class="muted">${esc(join([change.changed_on, change.payer]))}</span></p>
+<p><span class="code">${esc(change.policy_id)}</span> ${esc(change.policy_title)}</p>
+${change.summary ? `<p class="muted">${esc(change.summary)}</p>` : ""}
+</li>`,
+    );
+    return card("Backwork policy changes", "Policy changes", `<ul class="items">${items.join("")}</ul>${morePages(view.changes_omitted, view.has_more, "changes")}`);
+  }
+
+  if (view.kind === "jurisdiction_list") {
+    const rows = view.jurisdictions
+      .map((jurisdiction) => {
+        const mac = jurisdiction.website
+          ? `<a class="link" href="${esc(jurisdiction.website)}" data-external target="_blank" rel="noopener noreferrer">${esc(jurisdiction.mac ?? jurisdiction.code)}</a>`
+          : esc(jurisdiction.mac ?? "");
+        return `<tr><th scope="row" class="code">${esc(jurisdiction.code)}</th><td>${mac}</td><td class="muted">${esc(jurisdiction.states.join(", "))}</td></tr>`;
+      })
+      .join("");
+    return card(
+      "Backwork Medicare jurisdictions",
+      "Medicare contractor jurisdictions",
+      `<div class="table-wrap" role="region" aria-label="Jurisdictions" tabindex="0"><table>
+<caption class="sr-only">Medicare administrative contractor and states for each jurisdiction</caption>
+<thead><tr><th scope="col">Jurisdiction</th><th scope="col">Contractor</th><th scope="col">States</th></tr></thead>
+<tbody>${rows}</tbody></table></div>${more(view.jurisdictions_omitted, "jurisdictions")}`,
+    );
+  }
+
   const head = view.columns
     .map((column) => `<th scope="col"><span class="code">${esc(column.jurisdiction)}</span>${column.payer ? `<span class="muted block">${esc(column.payer)}</span>` : ""}</th>`)
     .join("");
@@ -182,7 +290,7 @@ ${section("Policies", list(policyLinks))}
  * MCP Apps bridge (`ui/*` JSON-RPC over postMessage) and also reads ChatGPT's
  * `window.openai` globals, so the component renders in either host.
  */
-export function widgetRuntime(kind: WidgetKind, render: (view: unknown) => string): void {
+export function widgetRuntime(component: ComponentKind, views: readonly ViewKind[], render: (view: unknown) => string): void {
   const root = document.getElementById("root") as HTMLElement;
   const html = document.documentElement;
   const pending = new Map<number, { resolve: (value: any) => void; reject: (reason: unknown) => void }>();
@@ -199,19 +307,24 @@ export function widgetRuntime(kind: WidgetKind, render: (view: unknown) => strin
       setTimeout(() => pending.delete(id) && reject(new Error(`${method} timed out`)), 10000);
     });
 
+  // An empty page reports zero height: a tool result with nothing to show must not leave a blank card.
   const reportSize = () => {
-    if (!initialized) return;
+    if (rendered === null) return; // No tool result yet.
     const box = html.getBoundingClientRect();
-    post({ method: "ui/notifications/size-changed", params: { width: Math.ceil(box.width), height: Math.ceil(box.height) } });
+    const height = rendered ? Math.ceil(box.height) : 0;
+    if (initialized) post({ method: "ui/notifications/size-changed", params: { width: Math.ceil(box.width), height } });
+    if (typeof window.openai?.notifyIntrinsicHeight === "function") window.openai.notifyIntrinsicHeight(height);
   };
 
+  /** Renders a tool result; a result without a view this component renders collapses it, and ChatGPT closes it. */
   const show = (structuredContent: unknown) => {
     const view = structuredContent && typeof structuredContent === "object" ? (structuredContent as { widget?: { kind?: unknown } }).widget : undefined;
-    const next = view && view.kind === kind ? render(view) : "";
+    const next = view && views.includes(view.kind as ViewKind) ? render(view) : "";
     if (next === rendered) return;
     rendered = next;
     root.innerHTML = next;
     reportSize();
+    if (!next && typeof window.openai?.requestClose === "function") window.openai.requestClose();
   };
 
   const applyTheme = (theme: unknown) => {
@@ -273,7 +386,7 @@ export function widgetRuntime(kind: WidgetKind, render: (view: unknown) => strin
   if (typeof ResizeObserver === "function") new ResizeObserver(reportSize).observe(document.body);
 
   request("ui/initialize", {
-    appInfo: { name: `backwork-${kind}`, version: "1.0.0" },
+    appInfo: { name: `backwork-${component}`, version: "1.0.0" },
     appCapabilities: { availableDisplayModes: ["inline"] },
     protocolVersion: "2026-01-26",
   })

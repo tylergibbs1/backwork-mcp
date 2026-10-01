@@ -27,9 +27,19 @@ import { limitCodeDetailsToPayer, otherPayersNote, resolveRequestedPayer } from 
 import { extractProvenance, formatProvenance, provenanceSchema } from "./provenance.js";
 import { projectEnvelope } from "./projection.js";
 import { TOOL_OPERATIONS } from "./tool-operations.js";
-import type { WidgetKind, WidgetView } from "./widgets/schemas.js";
+import type { ComponentKind, WidgetView } from "./widgets/schemas.js";
 import { registerWidgetResources, widgetOutputSchema, widgetToolMeta } from "./widgets/templates.js";
-import { buildCoverageCard, buildPolicyComparison, buildPriorAuthChecklist, buildResearchChecklist } from "./widgets/views.js";
+import {
+  buildCoverageCard,
+  buildCriteriaList,
+  buildJurisdictionList,
+  buildPolicyChanges,
+  buildPolicyComparison,
+  buildPolicyDetail,
+  buildPolicyList,
+  buildPriorAuthChecklist,
+  buildResearchChecklist,
+} from "./widgets/views.js";
 
 // Configuration
 const BACKWORK_API_BASE = process.env.BACKWORK_API_BASE || "https://backworkhealth.com/api/v1";
@@ -86,8 +96,12 @@ type BackworkToolConfig = {
   outputSchema?: BackworkToolInputSchema;
   annotations: ToolHints;
   _meta?: Record<string, unknown>;
-  /** The UI component that renders this tool's `structuredContent.widget` in MCP Apps hosts such as ChatGPT. */
-  widget?: WidgetKind;
+  /**
+   * The UI component that renders this tool's `structuredContent.widget` in MCP
+   * Apps hosts such as ChatGPT. Hosts load it for every call of the tool, so it
+   * must render every view the tool's actions return.
+   */
+  widget?: ComponentKind;
 };
 type BackworkToolHandler = (args: any, extra: unknown) => CallToolResult | Promise<CallToolResult>;
 type RegisterBackworkTool = (name: string, config: BackworkToolConfig, handler: BackworkToolHandler) => void;
@@ -775,8 +789,11 @@ function errorResult(message: string): CallToolResult {
   };
 }
 
-/** `widget` is the view model for the tool's UI component; it must match the component the tool declares. */
-function toolResult(message: string, data?: unknown, meta?: unknown, widget?: WidgetView): CallToolResult {
+/**
+ * `widget` is the view model for the tool's UI component; it must be a view the
+ * component renders. null (nothing to show) leaves it out, and the component collapses.
+ */
+function toolResult(message: string, data?: unknown, meta?: unknown, widget?: WidgetView | null): CallToolResult {
   const provenance = extractProvenance(data);
   const text = provenance ? `${message}\n\n${formatProvenance(provenance)}` : message;
   return {
@@ -1376,7 +1393,7 @@ This tool can combine code lookup, related policy evidence, prior-auth checks (t
     "policy_research",
     {
       operations: TOOL_OPERATIONS.policy_research,
-      widget: "policy_comparison",
+      widget: "policy_research",
       annotations: CATALOG_READ,
       description: `Research coverage policies and criteria.
 Use this for policy search, fetching one policy by ID, searching extracted criteria, reviewing policy changes, mapping state to MAC jurisdiction, or comparing how Medicare contractors (MACs) cover the same procedure codes side by side. This replaces several endpoint-shaped policy tools with one research workflow.`,
@@ -1424,7 +1441,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
           const lines = [`Found ${result.data.length} policies${result.meta?.pagination?.has_more ? " (more available)" : ""}:\n`];
           result.data.forEach((policy: any, i: number) => lines.push(`${i + 1}. ${formatPolicy(policy)}\n`));
           if (result.meta?.pagination?.cursor) lines.push(`More results available. Use cursor: "${result.meta.pagination.cursor}"`);
-          return toolResult(lines.join("\n"), result.data, result.meta);
+          return toolResult(lines.join("\n"), result.data, result.meta, buildPolicyList(query, result.data, result.meta));
         }
 
         if (action === "get") {
@@ -1433,7 +1450,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
             pathParams: { id: policy_id },
             query: { include: normalizeInclude(include, "criteria,codes") },
           });
-          return toolResult(formatPolicy(result.data, true), result.data, result.meta);
+          return toolResult(formatPolicy(result.data, true), result.data, result.meta, buildPolicyDetail(result.data));
         }
 
         if (action === "criteria") {
@@ -1450,7 +1467,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
             lines.push(`   ${cleanText(criteria.text, 320)}\n`);
           });
           if (result.meta?.pagination?.cursor) lines.push(`More results available. Use cursor: "${result.meta.pagination.cursor}"`);
-          return toolResult(lines.join("\n"), result.data, result.meta);
+          return toolResult(lines.join("\n"), result.data, result.meta, buildCriteriaList(query, result.data, result.meta));
         }
 
         if (action === "changes") {
@@ -1465,7 +1482,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
             if (change.change_summary) lines.push(`  Summary: ${change.change_summary}`);
           });
           if (result.meta?.pagination?.cursor) lines.push(`More changes available. Use cursor: "${result.meta.pagination.cursor}"`);
-          return toolResult(lines.join("\n"), result.data, result.meta);
+          return toolResult(lines.join("\n"), result.data, result.meta, buildPolicyChanges(result.data, result.meta));
         }
 
         const result = await backworkRequest("listJurisdictions");
@@ -1477,7 +1494,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
           if (jur.website_url) lines.push(`  Website: ${jur.website_url}`);
           lines.push("");
         });
-        return toolResult(lines.join("\n"), result.data, result.meta);
+        return toolResult(lines.join("\n"), result.data, result.meta, buildJurisdictionList(result.data));
       } catch (error) {
         return errorResult(formatToolError("research policies", error));
       }

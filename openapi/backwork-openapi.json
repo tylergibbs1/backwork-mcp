@@ -365,7 +365,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -806,8 +806,8 @@
                   "success": false,
                   "error": {
                     "code": "BILLING_FEATURE_REQUIRED",
-                    "message": "Your current plan does not include this feature",
-                    "hint": "Compare plans and API packs, and switch, at https://backworkhealth.com/api-usage",
+                    "message": "This organization's API access does not include this feature",
+                    "hint": "An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-feature-required",
                     "retryable": false
                   },
@@ -1052,7 +1052,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -1406,7 +1406,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -1642,7 +1642,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -1886,7 +1886,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -2177,7 +2177,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -2466,7 +2466,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -2737,7 +2737,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -3041,7 +3041,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -3379,7 +3379,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -3672,7 +3672,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -3937,7 +3937,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -4185,7 +4185,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -4409,7 +4409,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -4636,7 +4636,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -4894,7 +4894,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -5153,7 +5153,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -5401,7 +5401,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -5591,7 +5591,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -5877,8 +5877,8 @@
                   "success": false,
                   "error": {
                     "code": "BILLING_FEATURE_REQUIRED",
-                    "message": "Your current plan does not include this feature",
-                    "hint": "Compare plans and API packs, and switch, at https://backworkhealth.com/api-usage",
+                    "message": "This organization's API access does not include this feature",
+                    "hint": "An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-feature-required",
                     "retryable": false
                   },
@@ -6122,7 +6122,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -6349,7 +6349,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -6641,7 +6641,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -6927,7 +6927,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -7202,7 +7202,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -7527,7 +7527,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -7789,7 +7789,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -8062,7 +8062,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -8276,7 +8276,7 @@
                   "error": {
                     "code": "BILLING_CREDITS_EXHAUSTED",
                     "message": "Your organization has no request credits left for this call",
-                    "hint": "Buy a Credits pack or start a monthly pack at https://backworkhealth.com/api-usage; details lists the requests this call needs and the requests left",
+                    "hint": "details.requests_required is this call's cost and details.requests_available is the balance. Retry once the balance covers the call. An organization admin can manage the plan and usage in the Backwork dashboard at https://backworkhealth.com/api-usage",
                     "docUrl": "https://backworkhealth.com/docs/errors#billing-credits-exhausted",
                     "retryable": false
                   },
@@ -10924,33 +10924,17 @@
                   "SUBSCRIPTION_INACTIVE",
                   "FEATURE_NOT_AVAILABLE",
                   "USAGE_LIMIT_EXCEEDED",
-                  "DAILY_LIMIT_EXCEEDED",
-                  "UPGRADE_REQUIRED"
+                  "DAILY_LIMIT_EXCEEDED"
                 ]
               },
               "message": {
-                "type": "string"
-              },
-              "upgrade_to": {
-                "description": "Lowest plan that includes the feature",
                 "type": "string",
-                "enum": [
-                  "free",
-                  "starter",
-                  "practice",
-                  "professional",
-                  "scale",
-                  "enterprise"
-                ]
-              },
-              "pricing_url": {
-                "type": "string"
+                "description": "Which limit or feature check failed, when it resets, and who can manage the plan"
               }
             },
             "required": [
               "code",
-              "message",
-              "pricing_url"
+              "message"
             ]
           },
           "meta": {
