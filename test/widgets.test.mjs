@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { after, before, describe, test } from "node:test";
 import vm from "node:vm";
@@ -244,6 +245,13 @@ describe("component resources", () => {
   });
 
   for (const [kind, widget] of Object.entries(WIDGETS)) {
+    // Hosts cache a component by URI, so the URI must change whenever its HTML does.
+    test(`${kind} URI is derived from a hash of the HTML it serves`, async () => {
+      const { contents } = await client.readResource({ uri: widget.uri });
+      const hash = createHash("sha256").update(contents[0].text).digest("hex").slice(0, 12);
+      assert.match(widget.uri, new RegExp(`^ui://backwork/[a-z-]+-${hash}\\.html$`));
+    });
+
     test(`${kind} is served self-contained, with an empty CSP`, async () => {
       const { contents } = await client.readResource({ uri: widget.uri });
       assert.equal(contents.length, 1);
