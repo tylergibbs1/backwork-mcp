@@ -670,10 +670,17 @@ function formatPolicy(policy: any, detailed = false): string {
 function formatPriorAuth(result: any): string {
   const lines: string[] = [];
 
-  // Main determination
-  lines.push(`Prior Authorization Required: ${result.pa_required ? "YES" : "NO"}`);
+  // Main determination. With no matching policy the API still sends pa_required: false, which
+  // means "no evidence", not "not required".
+  const paAnswer = result.coverage_status === "unknown" ? "UNKNOWN" : result.pa_required ? "YES" : "NO";
+  lines.push(`Prior Authorization Required: ${paAnswer}`);
   lines.push(`Confidence: ${result.confidence.toUpperCase()}`);
   lines.push(`Reason: ${result.reason}`);
+  if (result.requires_manual_review) lines.push("Manual review required");
+  if (result.known_gaps?.length > 0) {
+    lines.push("Known gaps:");
+    result.known_gaps.forEach((gap: string) => lines.push(`- ${gap}`));
+  }
 
   // MAC info
   if (result.mac) {
@@ -1264,7 +1271,7 @@ function registerWorkflowTools(registerTool: RegisterBackworkTool): void {
       widget: "coverage_card",
       description: `Answer common coverage questions for procedure codes in one workflow.
 Use this when a user asks whether codes are covered, whether prior authorization is required, what policies support the answer, or how coverage differs by jurisdiction.
-This tool can combine code lookup, related policy evidence, Medicare prior-auth checks, claim-risk validation, jurisdiction comparison, and spending evidence so the agent does not need to chain endpoint-shaped tools.`,
+This tool can combine code lookup, related policy evidence, prior-auth checks (traditional Medicare, or the named payer's own policies when payer is given), claim-risk validation, jurisdiction comparison, and spending evidence so the agent does not need to chain endpoint-shaped tools.`,
       inputSchema: {
         procedure_codes: z.array(z.string()).min(1).max(50).describe("CPT/HCPCS procedure codes, e.g. ['76942'] or ['J0585', '64493']. Up to 50 are supported for code_details-only batch lookup; contextual modules are limited to 10 codes."),
         code_system: z
@@ -1278,7 +1285,11 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
         state: z.string().length(2).optional().describe("Two-letter patient state used to infer MAC jurisdiction, e.g. TX"),
         jurisdiction: z.string().max(10).optional().describe("Optional MAC jurisdiction code for policy filtering, e.g. JM or JH"),
         diagnosis_codes: z.array(z.string()).max(20).optional().describe("Diagnosis codes when claim-risk validation is needed"),
-        payer: z.string().max(80).optional().describe("Payer name or policy source label for claim validation"),
+        payer: z
+          .string()
+          .max(80)
+          .optional()
+          .describe("Payer name, slug or code, e.g. 'Moda Health'. The prior-auth check answers from this payer's policies; omit it for traditional Medicare."),
         plan_type: z.enum(["commercial", "medicare_advantage", "medicaid", "traditional_medicare", "exchange"]).optional(),
         date_of_service: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Date of service in YYYY-MM-DD format"),
         site_of_service: z.enum(["office", "outpatient_hospital", "asc", "inpatient", "home", "telehealth"]).optional(),
@@ -1329,7 +1340,7 @@ This tool can combine code lookup, related policy evidence, Medicare prior-auth 
 
         if (requested.has("prior_auth")) {
           const result = await backworkRequest("checkPriorAuth", {
-            body: { procedure_codes, state },
+            body: { procedure_codes, state, payer },
           });
           data.prior_auth = result.data;
           lines.push("\n--- Prior Authorization ---");
@@ -1556,7 +1567,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
       widget: "prior_auth_checklist",
       description: "Check, start, or poll payer prior-authorization research without exposing separate task-management tools.",
       inputSchema: {
-        action: z.enum(["check", "start_research", "get_research"]).describe("Use check for immediate Medicare PA evidence, start_research for payer website research, get_research to poll a research_id"),
+        action: z.enum(["check", "start_research", "get_research"]).describe("Use check for immediate PA evidence (traditional Medicare, or the payer's own policies when payer is given), start_research for payer website research, get_research to poll a research_id"),
         procedure_codes: z.array(z.string()).min(1).max(10).optional(),
         research_id: z.string().optional(),
         payer: z.string().optional(),
@@ -1577,7 +1588,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
 
         if (action === "check") {
           const result = await backworkRequest("checkPriorAuth", {
-            body: { procedure_codes, state: body.state },
+            body: { procedure_codes, state: body.state, payer: body.payer },
           });
           return toolResult(formatPriorAuth(result.data), result.data, result.meta, buildPriorAuthChecklist(result.data));
         }

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Backwork Coverage Policy API",
-    "description": "The Backwork API provides programmatic access to Medicare and commercial payer coverage policies,\nmedical code lookups, prior authorization requirements, and policy change tracking.\n\n## Authentication\nAll endpoints (except /health) require an API key passed in the Authorization header:\n```\nAuthorization: Bearer bwk_live_xxxxx\n```\n\n## Pricing and Rate Limiting\n| Pack | Price | Requests | Requests per minute | Includes |\n| --- | --- | --- | --- | --- |\n| Credits | $20.00 once | 1,000 requests, never expire | 60 | no overage: calls stop at zero |\n| Build | $200.00 per month | 100,000 requests per month | 300 | overage billed per request |\n| Scale | $1,000.00 per month | 1,000,000 requests per month | 1,000 | overage billed per request, webhooks, [published SLA](https://backworkhealth.com/docs/sla) |\n\nEvery organization starts with 100 free starter credits, granted once; they never expire. Every API key in an organization draws on one balance of request credits and one sliding one-minute rate-limit window. A monthly allowance is spent before purchased Credits, and purchased Credits never expire. On Build and Scale, requests past the allowance bill as overage at $0.002 per request. With only Credits, a call the balance cannot cover returns `402 BILLING_CREDITS_EXHAUSTED`. Some endpoints count as more than one request, for both credits and the rate limit; the rest count as one. See https://backworkhealth.com/docs/rate-limits for the request cost of each endpoint.\n\nRate limit headers are included in all responses:\n- `X-RateLimit-Limit`: Maximum requests per window\n- `X-RateLimit-Remaining`: Requests remaining in current window\n- `X-RateLimit-Reset`: Unix timestamp when window resets\n\n## Response Format\nAll responses follow a consistent structure:\n```json\n{\n  \"success\": true,\n  \"data\": { ... },\n  \"meta\": {\n    \"request_id\": \"req_xxxxx\",\n    \"timestamp\": \"2024-01-15T10:30:00Z\"\n  }\n}\n```\n\n## Error Handling\nErrors include machine-readable codes for programmatic handling:\n```json\n{\n  \"success\": false,\n  \"error\": {\n    \"code\": \"RESOURCE_POLICY_NOT_FOUND\",\n    \"message\": \"Policy not found\",\n    \"docUrl\": \"https://backworkhealth.com/docs/errors#resource-policy-not-found\",\n    \"retryable\": false\n  },\n  \"meta\": { \"request_id\": \"req_xxxxx\", \"timestamp\": \"...\" }\n}\n```\nRetry only when `retryable` is true.\n\n## Production Availability\nOperations marked `x-backwork-availability: unavailable-in-production` are not live yet. Production\nrequests to them return 404 with `COMMERCIAL_SURFACE_UNAVAILABLE`.\n\n## Sandbox\nA synthetic-data sandbox at `https://backworkhealth.com/api/sandbox/v1` mirrors the policy search, code lookup,\nprior-auth check, and coverage evaluation operations with the same request and response shapes. It needs a\n`bwk_test_` key, which `POST /api/sandbox/v1/keys` issues without an account. Test keys work only on the\nsandbox, and the sandbox rejects live keys. Its spec is at `https://backworkhealth.com/api/sandbox/v1/openapi.json`.",
+    "description": "The Backwork API provides programmatic access to Medicare and commercial payer coverage policies,\nmedical code lookups, prior authorization requirements, and policy change tracking.\n\n## Authentication\nAll endpoints (except /health) require an API key passed in the Authorization header:\n```\nAuthorization: Bearer bwk_live_xxxxx\n```\n\n## Pricing and Rate Limiting\n| Pack | Price | Requests | Requests per minute | Includes |\n| --- | --- | --- | --- | --- |\n| Credits | $20.00 once | 1,000 requests, never expire | 60 | no overage: calls stop at zero |\n| Build | $200.00 per month | 100,000 requests per month | 300 | overage billed per request |\n| Scale | $1,000.00 per month | 1,000,000 requests per month | 1,000 | overage billed per request, webhooks for `compliance.acknowledged` events, [published SLA](https://backworkhealth.com/docs/sla) |\n\nEvery organization starts with 100 free starter credits, granted once; they never expire. Every API key in an organization draws on one balance of request credits and one sliding one-minute rate-limit window. A monthly allowance is spent before purchased Credits, and purchased Credits never expire. On Build and Scale, requests past the allowance bill as overage at $0.002 per request. With only Credits, a call the balance cannot cover returns `402 BILLING_CREDITS_EXHAUSTED`. Some endpoints count as more than one request, for both credits and the rate limit; the rest count as one. See https://backworkhealth.com/docs/rate-limits for the request cost of each endpoint.\n\nRate limit headers are included in all responses:\n- `X-RateLimit-Limit`: Maximum requests per window\n- `X-RateLimit-Remaining`: Requests remaining in current window\n- `X-RateLimit-Reset`: Unix timestamp when window resets\n\n## Response Format\nAll responses follow a consistent structure:\n```json\n{\n  \"success\": true,\n  \"data\": { ... },\n  \"meta\": {\n    \"request_id\": \"req_xxxxx\",\n    \"timestamp\": \"2024-01-15T10:30:00Z\"\n  }\n}\n```\n\n## Error Handling\nErrors include machine-readable codes for programmatic handling:\n```json\n{\n  \"success\": false,\n  \"error\": {\n    \"code\": \"RESOURCE_POLICY_NOT_FOUND\",\n    \"message\": \"Policy not found\",\n    \"docUrl\": \"https://backworkhealth.com/docs/errors#resource-policy-not-found\",\n    \"retryable\": false\n  },\n  \"meta\": { \"request_id\": \"req_xxxxx\", \"timestamp\": \"...\" }\n}\n```\nRetry only when `retryable` is true.\n\n## Production Availability\nOperations marked `x-backwork-availability: unavailable-in-production` are not live yet. Production\nrequests to them return 404 with `COMMERCIAL_SURFACE_UNAVAILABLE`.\n\n## Sandbox\nA synthetic-data sandbox at `https://backworkhealth.com/api/sandbox/v1` mirrors the policy search, code lookup,\nprior-auth check, and coverage evaluation operations with the same request and response shapes. It needs a\n`bwk_test_` key, which `POST /api/sandbox/v1/keys` issues without an account. Test keys work only on the\nsandbox, and the sandbox rejects live keys. Its spec is at `https://backworkhealth.com/api/sandbox/v1/openapi.json`.",
     "version": "1.0.0",
     "contact": {
       "email": "support@backworkhealth.com",
@@ -3788,7 +3788,7 @@
           "Prior Auth"
         ],
         "summary": "Check prior authorization requirements",
-        "description": "Evaluate whether Medicare procedures require prior authorization based on procedure codes and state/jurisdiction. Returns matched LCD/NCD policies, coverage disposition, documentation requirements, and clinical criteria. Send `X-Idempotency-Key` to replay the first response for safe retries.",
+        "description": "Evaluate whether procedures require prior authorization based on procedure codes, payer, and state. Without `payer` (or with `payer: Medicare`) it answers for traditional Medicare from LCD/NCD policies in the state's MAC jurisdiction; with a payer it answers from that payer's policies. Returns matched policies, coverage disposition, documentation requirements, and clinical criteria. Codes a policy carries only because its title names the drug come back with `source: inferred_title_match`, cap the confidence, and are named in `known_gaps`. Send `X-Idempotency-Key` to replay the first response for safe retries.",
         "operationId": "checkPriorAuth",
         "parameters": [
           {
@@ -4302,7 +4302,7 @@
           "Prior Auth"
         ],
         "summary": "Research prior authorization requirements",
-        "description": "Use AI-powered web research to find prior authorization requirements directly from payer websites. Supports async mode (returns `research_id` and `poll_url` for polling) or synchronous mode (`sync: true`, waits up to two minutes). `clinical_context` is rejected: submit only rule-level `structured_coverage_context` fields. Cost: 5 billable units per request.",
+        "description": "Use AI-powered web research to find prior authorization requirements directly from payer websites. Supports async mode (returns `research_id` and `poll_url` for polling) or synchronous mode (`sync: true`, waits up to two minutes). Every source in `result.sources` is a page the research cited for a field of the result. `clinical_context` is rejected: submit only rule-level `structured_coverage_context` fields. If the research provider is unavailable the call fails with a retryable `SERVER_UPSTREAM_UNAVAILABLE` and is not charged. Cost: 8 requests per call.",
         "operationId": "researchPriorAuth",
         "requestBody": {
           "required": true,
@@ -4484,6 +4484,30 @@
                     "hint": "Contact support@backworkhealth.com with the request_id from this response",
                     "docUrl": "https://backworkhealth.com/docs/errors#server-internal-error",
                     "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: `SERVER_UPSTREAM_UNAVAILABLE`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "SERVER_UPSTREAM_UNAVAILABLE",
+                    "message": "An upstream provider this endpoint depends on is temporarily unavailable",
+                    "hint": "No request credits were charged. Retry with exponential backoff",
+                    "docUrl": "https://backworkhealth.com/docs/errors#server-upstream-unavailable",
+                    "retryable": true
                   },
                   "meta": {
                     "request_id": "req_abc123",
@@ -4710,6 +4734,30 @@
                     "hint": "Contact support@backworkhealth.com with the request_id from this response",
                     "docUrl": "https://backworkhealth.com/docs/errors#server-internal-error",
                     "retryable": false
+                  },
+                  "meta": {
+                    "request_id": "req_abc123",
+                    "timestamp": "2024-01-15T10:30:00Z"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: `SERVER_UPSTREAM_UNAVAILABLE`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "SERVER_UPSTREAM_UNAVAILABLE",
+                    "message": "An upstream provider this endpoint depends on is temporarily unavailable",
+                    "hint": "No request credits were charged. Retry with exponential backoff",
+                    "docUrl": "https://backworkhealth.com/docs/errors#server-upstream-unavailable",
+                    "retryable": true
                   },
                   "meta": {
                     "request_id": "req_abc123",
@@ -8911,6 +8959,7 @@
           "SERVER_TIMEOUT",
           "SERVER_UNAVAILABLE",
           "SERVER_IDEMPOTENCY_UNAVAILABLE",
+          "SERVER_UPSTREAM_UNAVAILABLE",
           "COMMERCIAL_SURFACE_UNAVAILABLE"
         ],
         "description": "Machine-readable error code"
@@ -12861,10 +12910,19 @@
             ]
           },
           "state": {
-            "description": "Two-letter state code for MAC jurisdiction lookup",
+            "description": "Two-letter state code. For Medicare it selects the MAC jurisdiction; for a payer it keeps the payer's policies that apply in that state.",
             "type": "string",
             "minLength": 2,
             "maxLength": 2
+          },
+          "payer": {
+            "description": "Payer name, slug or code, e.g. `Moda Health`, `moda-health` or `MODA`. Omit it, or send `Medicare`, for traditional Medicare LCD, Article and NCD evidence. Any other payer is answered from that payer's own policies.",
+            "examples": [
+              "Moda Health"
+            ],
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
           },
           "criteria_page": {
             "default": 1,
@@ -12987,10 +13045,14 @@
                 "type": "number"
               },
               "num_pages": {
-                "type": "number"
+                "type": "number",
+                "deprecated": true,
+                "description": "Deprecated: always 0."
               },
               "reasoning_tokens": {
-                "type": "number"
+                "type": "number",
+                "deprecated": true,
+                "description": "Deprecated: always 0."
               },
               "total_dollars": {
                 "type": "number"
@@ -13152,7 +13214,7 @@
           },
           "sync": {
             "default": false,
-            "description": "If true, wait for completion. If false, return research_id for polling.",
+            "description": "If true, wait up to two minutes for completion; a run still going after that comes back with its `poll_url`. If false, return research_id for polling.",
             "type": "boolean"
           }
         },
