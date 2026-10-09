@@ -1,6 +1,6 @@
 {
   "name": "@backwork/mcp",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "description": "MCP server for Backwork: Medicare and payer medical policy, prior authorization, claim risk, and medical codes. Hosted OAuth remote or local stdio.",
   "mcpName": "io.github.tylergibbs1/backwork-mcp",
   "type": "module",
@@ -12,6 +12,7 @@
     "build": "npm run clean && tsc",
     "guard:release-tag": "node -e \"const pkg=require('./package.json'); const expected='v'+pkg.version; const actual=process.env.GITHUB_REF_NAME; if (actual !== expected) { throw new Error('Release ref '+(actual || '<unset>')+' does not match package version '+expected); }\"",
     "test": "npm run build && node scripts/mcp-smoke.mjs && node scripts/mcp-http-auth-smoke.mjs && node --test test/*.test.mjs && node scripts/check-openapi-contract.mjs",
+    "verify:package": "npm run build && node scripts/verify-package.mjs 18.20.8",
     "start": "node build/src/index.js",
     "start:http": "node build/src/index.js --http",
     "dev": "tsc --watch",
@@ -31,11 +32,10 @@
     "@modelcontextprotocol/sdk": "^1.32.1",
     "zod": "^3.25.76"
   },
-  "overrides": {
-    "@modelcontextprotocol/sdk": {
-      "@hono/node-server": "1.19.15"
-    }
-  },
+  "bundleDependencies": [
+    "@modelcontextprotocol/sdk",
+    "zod"
+  ],
   "devDependencies": {
     "@types/node": "^22.0.0",
     "ajv": "^8.20.0",

@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
+const serverEntry = resolve(process.argv[2] || "build/src/index.js");
+const require = createRequire(serverEntry);
+const { Client } = require("@modelcontextprotocol/sdk/client/index.js");
+const { StreamableHTTPClientTransport } = require("@modelcontextprotocol/sdk/client/streamableHttp.js");
 
 const introspectionBodies = [];
 const introspectionServer = createServer(async (req, res) => {
@@ -10,7 +18,7 @@ const introspectionServer = createServer(async (req, res) => {
   introspectionBodies.push(body);
   const token = new URLSearchParams(body).get("token");
   res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ active: token === "valid-token" }));
+  res.end(JSON.stringify({ active: token === "valid-token", scope: "backwork:mcp read" }));
 });
 
 await new Promise((resolve) => introspectionServer.listen(0, "127.0.0.1", resolve));
@@ -20,12 +28,14 @@ assert.ok(introspectionAddress && typeof introspectionAddress === "object");
 process.env.BACKWORK_MCP_AUTH_MODE = "oauth";
 process.env.BACKWORK_MCP_OAUTH_AUTHORIZATION_SERVERS = "https://auth.backwork.example";
 process.env.BACKWORK_MCP_OAUTH_INTROSPECTION_URL = `http://127.0.0.1:${introspectionAddress.port}/introspect`;
-process.env.BACKWORK_MCP_OAUTH_SCOPES = "backwork:mcp";
+process.env.BACKWORK_MCP_OAUTH_SCOPES = "backwork:mcp read";
+process.env.BACKWORK_MCP_OAUTH_REQUIRED_SCOPES = "backwork:mcp";
 process.env.BACKWORK_MCP_PUBLIC_URL = "https://mcp.backwork.example";
 
-const { handleHttpRequest } = await import("../build/src/index.js");
+const { handleHttpRequest } = await import(pathToFileURL(serverEntry));
 
 const server = createServer(handleHttpRequest);
+const client = new Client({ name: "backwork-mcp-http-smoke", version: "1.0.0" });
 
 try {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -40,7 +50,7 @@ try {
   const metadata = await metadataResponse.json();
   assert.equal(metadata.resource, "https://mcp.backwork.example/mcp");
   assert.deepEqual(metadata.authorization_servers, ["https://auth.backwork.example"]);
-  assert.deepEqual(metadata.scopes_supported, ["backwork:mcp"]);
+  assert.deepEqual(metadata.scopes_supported, ["backwork:mcp", "read"]);
 
   const pathMetadataResponse = await fetch(`${baseUrl}/.well-known/oauth-protected-resource/mcp`, {
     headers: { Host: "127.0.0.1" },
@@ -75,8 +85,21 @@ try {
   assert.equal(activeTokenBody.error, "invalid_json");
   assert.match(introspectionBodies.at(-1) || "", /token=valid-token/);
 
-  console.log("MCP HTTP OAuth smoke test passed.");
+  await client.connect(new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`), {
+    requestInit: { headers: { Authorization: "Bearer valid-token" } },
+  }));
+  const { tools } = await client.listTools();
+  assert.ok(tools.some((tool) => tool.name === "backwork_coverage_lookup"));
+  assert.equal(tools.some((tool) => tool.name === "backwork_webhook_management"), false);
+  const invalidPolicyCall = await client.callTool({
+    name: "backwork_policy_research",
+    arguments: { action: "get", response_format: "json" },
+  });
+  assert.equal(invalidPolicyCall.isError, true);
+
+  console.log(`MCP HTTP OAuth smoke test passed: initialization, ${tools.length} tools and a tool call on ${process.version}.`);
 } finally {
+  await client.close();
   await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   await new Promise((resolve, reject) => introspectionServer.close((error) => (error ? reject(error) : resolve())));
 }
