@@ -42,7 +42,15 @@ const none: readonly string[] = [];
 const notices = ["attributions", "disclaimer"] as const;
 const pagination = ["pagination.cursor", "pagination.has_more", "pagination.limit"] as const;
 
-const codePolicyFields = ["policy_id", "title", "policy_type", "disposition", "jurisdiction", "source_url", "public_url", "effective_date", "source"];
+// Audit samples describe the source's records, never confidence in one policy.
+const sourceCheckFields = [
+  "source_check.source_url",
+  "source_check.last_fetched_at",
+  "source_check.content_sha256",
+  ...["field", "sampled_at", "sample_size", "accuracy", "ci_low", "ci_high", "method"].map((field) => `source_check.source_accuracy[].${field}`),
+];
+const codeFields = ["code", "code_system", "disposition", "source", "grounding"];
+const codePolicyFields = ["policy_id", "title", "policy_type", "disposition", "jurisdiction", "source_url", "public_url", "effective_date", "source", "grounding", ...sourceCheckFields];
 const lookupFields = [
   "code",
   "code_system",
@@ -61,7 +69,7 @@ const lookupFields = [
   "suggestions[].score",
   "suggestions[].match_type",
 ];
-const sourceFields = ["policy_id", "title", "policy_type", "jurisdiction", "source_url", "public_url", "effective_date", "last_verified_at"];
+const sourceFields = ["policy_id", "title", "policy_type", "jurisdiction", "source_url", "public_url", "effective_date", "last_verified_at", ...sourceCheckFields];
 const researchReads = [
   "research_id",
   "status",
@@ -118,7 +126,7 @@ export const BACKWORK_OPERATIONS = {
       ...sourceFields.map((field) => `matched_policies[].${field}`),
       "matched_policies[].payer.name",
       "matched_policies[].payer.slug",
-      "matched_policies[].codes",
+      ...[...codeFields, "condition_reference"].map((field) => `matched_policies[].codes[].${field}`),
       "documentation_checklist",
       "criteria_details.indications[].text",
       "criteria_details.indications[].policy_id",
@@ -171,6 +179,7 @@ export const BACKWORK_OPERATIONS = {
       "codes[].denial_risk",
       "codes[].documentation_requirements",
       "codes[].issues",
+      ...sourceFields.map((field) => `codes[].policy_sources[].${field}`),
       ...sourceFields.map((field) => `policy_sources[].${field}`),
       "mac",
     ],
@@ -197,9 +206,11 @@ export const BACKWORK_OPERATIONS = {
       "comparison[].policies[].source_url",
       "comparison[].policies[].public_url",
       "comparison[].policies[].is_national",
+      ...sourceCheckFields.map((field) => `comparison[].policies[].${field}`),
       "comparison[].policies[].codes[].code",
       "comparison[].policies[].codes[].disposition",
       "comparison[].policies[].codes[].source",
+      "comparison[].policies[].codes[].grounding",
       "national_policies[].policy_id",
       "national_policies[].title",
       "national_policies[].policy_type",
@@ -207,7 +218,8 @@ export const BACKWORK_OPERATIONS = {
       "national_policies[].source_url",
       "national_policies[].public_url",
       "national_policies[].is_national",
-      "national_policies[].codes",
+      ...sourceCheckFields.map((field) => `national_policies[].${field}`),
+      ...codeFields.map((field) => `national_policies[].codes[].${field}`),
       "summary.total_jurisdictions",
       "summary.jurisdictions_with_coverage",
       "summary.national_policies_count",
@@ -259,7 +271,8 @@ export const BACKWORK_OPERATIONS = {
       "[].public_url",
       "[].payer",
       "[].summary",
-      "[].codes",
+      ...sourceCheckFields.map((field) => `[].${field}`),
+      ...codeFields.map((field) => `[].codes[].${field}`),
       "[].criteria[].section",
       "[].criteria[].text",
     ],
@@ -293,12 +306,14 @@ export const BACKWORK_OPERATIONS = {
       "mac.jurisdiction_name",
       "mac.states",
       "payer.name",
+      ...sourceCheckFields,
       "criteria.*[].text",
       "criteria.*[].tags",
       "codes.*[].code",
       "codes.*[].display",
       "codes.*[].disposition",
       "codes.*[].source",
+      "codes.*[].grounding",
     ],
     readsForWriteAccess: none,
     metaReads: notices,
@@ -323,6 +338,8 @@ export const BACKWORK_OPERATIONS = {
       "[].policy.policy_id",
       "[].policy.title",
       "[].policy.public_url",
+      "[].policy.policy_type",
+      ...sourceCheckFields.map((field) => `[].policy.${field}`),
     ],
     readsForWriteAccess: none,
     metaReads: [...pagination, ...notices],
@@ -370,6 +387,7 @@ export const BACKWORK_OPERATIONS = {
       "policy.title",
       "policy.policy_type",
       "policy.public_url",
+      ...sourceCheckFields.map((field) => `policy.${field}`),
     ],
     readsForWriteAccess: none,
     metaReads: notices,

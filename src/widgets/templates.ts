@@ -34,7 +34,7 @@ const WIDGET_DEFINITIONS: Record<ComponentKind, WidgetDefinition> = {
     name: "coverage-card",
     title: "Coverage result card",
     description:
-      "Shows each policy that lists the requested codes: payer, policy title and number, effective date, each code's disposition and whether the document lists it or it was inferred from the policy title, and a link to the policy.",
+      "Shows each policy's payer, title and number, effective and source fetch dates, source sample audits, each code's disposition, extraction source and retained-text grounding, and a link to the policy.",
     invoking: "Checking coverage…",
     invoked: "Coverage checked",
   },
@@ -42,7 +42,7 @@ const WIDGET_DEFINITIONS: Record<ComponentKind, WidgetDefinition> = {
     name: "prior-auth-checklist",
     title: "Prior authorization checklist",
     description:
-      "Shows the prior-authorization determination, the codes that require it, the documentation to gather, known gaps including codes inferred from a policy title, and citations.",
+      "Shows the prior-authorization determination, codes with extraction source and retained-text grounding, documentation to gather, known gaps, and citations with source fetch dates and source sample audits.",
     invoking: "Researching prior authorization…",
     invoked: "Prior authorization researched",
   },
@@ -50,7 +50,7 @@ const WIDGET_DEFINITIONS: Record<ComponentKind, WidgetDefinition> = {
     name: "policy-research",
     title: "Policy research card",
     description:
-      "Shows the policy research result: a comparison table of the codes across Medicare contractors (MACs), a policy search result list, one policy's summary with criteria excerpts and codes, matching coverage criteria, recent policy changes, or the MAC jurisdictions, with links to the policies.",
+      "Shows policy comparisons across Medicare contractors, search results, a policy's summary, criteria and codes, matching criteria, recent changes or MAC jurisdictions, with policy links, source fetch dates, source sample audits and retained-text code grounding.",
     invoking: "Researching policies…",
     invoked: "Policies researched",
   },

@@ -56,6 +56,23 @@ export function codeSourceLabel(source: CodeSource): string {
   }
 }
 
+/** Code grounding is a retained-text check, separate from how the code was extracted. */
+export function codeGroundingLabel(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  switch (value) {
+    case "grounded": return "Found in retained source text";
+    case "not_grounded": return "Not found in retained source text";
+    case "no_source_text": return "No retained source text to check";
+    case "not_checked": return "Grounding not checked";
+    default: return `Grounding: ${typeof value === "string" ? value : JSON.stringify(value)} (unrecognized)`;
+  }
+}
+
+export function codeGroundingNote(value: unknown): string {
+  const label = codeGroundingLabel(value);
+  return label ? ` — ${label}` : "";
+}
+
 type JsonRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is JsonRecord {

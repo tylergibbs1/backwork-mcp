@@ -280,7 +280,7 @@ describe("structured content", () => {
   test("coverage card labels inferred codes and links Backwork pages, else the source", async () => {
     const { structuredContent } = await CALLS.coverage_card();
     const [listed, inferred, commercial] = structuredContent.widget.policies;
-    assert.deepEqual(listed.codes[0], { code: "J1001", code_system: "HCPCS", disposition: "covered", source: "document", source_label: "Listed in policy" });
+    assert.deepEqual(listed.codes[0], { code: "J1001", code_system: "HCPCS", disposition: "covered", source: "document", source_label: "Listed in policy", grounding: null, grounding_label: null });
     assert.equal(listed.payer, "CMS");
     assert.deepEqual(listed.link, backworkPage("L1"));
     assert.equal(inferred.codes[0].source_label, "Inferred from policy title");

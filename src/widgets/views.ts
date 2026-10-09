@@ -1,7 +1,8 @@
-import { codeSourceLabel, parseCodeSource } from "../code-source.js";
+import { codeGroundingLabel, codeSourceLabel, parseCodeSource } from "../code-source.js";
 import { policyLink } from "../policy-links.js";
 import { parsePriorAuthCheck, parseResearchDetermination } from "../prior-auth-verdict.js";
-import { authorityOf, httpUrl } from "../provenance.js";
+import { authorityOf, httpUrl, sourceFetchedAt } from "../provenance.js";
+import { parseSourceCheck } from "../source-check.js";
 import type {
   ComparisonCell,
   CoverageCardView,
@@ -87,7 +88,9 @@ function widgetCode(code: string, record: JsonRecord, codeSystem: unknown = reco
     code_system: str(codeSystem),
     disposition: str(record.disposition),
     source: source.kind,
-    source_label: codeSourceLabel(source),
+    source_label: source.kind === "document" && record.grounding === "not_grounded" ? "Read by document pipeline" : codeSourceLabel(source),
+    grounding: str(record.grounding),
+    grounding_label: codeGroundingLabel(record.grounding),
   };
 }
 
@@ -102,10 +105,12 @@ function widgetPolicy(record: JsonRecord): WidgetPolicy | null {
     payer: authorityOf(record),
     jurisdiction: str(record.jurisdiction),
     effective_date: str(record.effective_date),
+    retrieved_at: sourceFetchedAt(record),
+    source_check: parseSourceCheck(record.source_check),
     link: policyLink({
       policy_id: policyId,
       policy_type: policyType,
-      source_url: record.source_url,
+      source_url: record.source_url ?? parseSourceCheck(record.source_check)?.source_url,
       public_url: record.public_url,
     }),
   };
@@ -127,7 +132,18 @@ type PolicyGroup = WidgetPolicy & { codes: WidgetCode[] };
 
 function addCode(groups: Map<string, PolicyGroup>, policy: WidgetPolicy, code: WidgetCode): void {
   const group = groups.get(policy.policy_id) ?? { ...policy, codes: [] };
-  if (!group.codes.some((existing) => existing.code === code.code)) group.codes.push(code);
+  // A prior-auth result can fill source evidence absent from an older code lookup.
+  if (group.source_check == null && policy.source_check != null) {
+    group.source_check = policy.source_check;
+    group.retrieved_at = policy.retrieved_at;
+  }
+  const existing = group.codes.find((entry) => entry.code === code.code);
+  if (!existing) group.codes.push(code);
+  else if (existing.grounding == null && code.grounding != null) {
+    existing.grounding = code.grounding;
+    existing.grounding_label = code.grounding_label;
+    if (existing.source === "document" && code.grounding === "not_grounded") existing.source_label = "Read by document pipeline";
+  }
   groups.set(policy.policy_id, group);
 }
 
@@ -245,6 +261,8 @@ export function buildResearchChecklist(research: unknown): PriorAuthChecklistVie
         payer,
         jurisdiction: null,
         effective_date: str(policy.effective_date),
+        retrieved_at: null,
+        source_check: null,
         link: policyLink({ policy_id: policyId, policy_type: null, source_url: policy.policy_url }),
       };
     })
@@ -264,7 +282,7 @@ export function buildResearchChecklist(research: unknown): PriorAuthChecklistVie
   };
 }
 
-const emptyCell: ComparisonCell = { disposition: null, policy_id: null, source: null, source_label: null, more: 0 };
+const emptyCell: ComparisonCell = { disposition: null, policy_id: null, source: null, source_label: null, grounding: null, grounding_label: null, more: 0 };
 
 function comparisonCell(code: string, policies: JsonRecord[]): ComparisonCell {
   // Jurisdiction-specific policies first: they are what differs between columns.
@@ -282,6 +300,8 @@ function comparisonCell(code: string, policies: JsonRecord[]): ComparisonCell {
     policy_id: str(first.policy.policy_id),
     source: row.source,
     source_label: row.source_label,
+    grounding: row.grounding,
+    grounding_label: row.grounding_label,
     more: matches.length - 1,
   };
 }
@@ -402,6 +422,7 @@ export function buildCriteriaList(query: string | undefined, list: unknown, meta
       policy_id: record.policy_id ?? nested.policy_id,
       title: record.policy_title ?? nested.title,
       public_url: nested.public_url,
+      source_check: nested.source_check,
     });
     return text && policy ? [{ section: str(record.section) ?? "other", text, policy }] : [];
   });

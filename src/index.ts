@@ -22,11 +22,12 @@ import {
   type Scope,
 } from "./api-operations.js";
 import { BackworkApiError, formatApiFailure, parseApiFailure } from "./api-errors.js";
-import { codeSourceNote, parseCodeSources, type SourcedCode } from "./code-source.js";
+import { codeGroundingNote, codeSourceNote, parseCodeSources, type SourcedCode } from "./code-source.js";
 import { limitCodeDetailsToPayer, otherPayersNote, resolveRequestedPayer } from "./payer-scope.js";
 import { parsePriorAuthCheck, parseResearchDetermination, verdictAnswer } from "./prior-auth-verdict.js";
 import { extractProvenance, formatProvenance, provenanceSchema } from "./provenance.js";
 import { projectEnvelope } from "./projection.js";
+import { formatSourceAccuracy, parseSourceCheck } from "./source-check.js";
 import { TOOL_OPERATIONS } from "./tool-operations.js";
 import type { ComponentKind, WidgetView } from "./widgets/schemas.js";
 import { registerWidgetResources, widgetOutputSchema, widgetToolMeta } from "./widgets/templates.js";
@@ -71,7 +72,7 @@ const oauthExpectedAudiences = parseDelimitedList(process.env.BACKWORK_MCP_OAUTH
 const oauthResourceOverride = process.env.BACKWORK_MCP_OAUTH_RESOURCE;
 const publicUrlOverride = process.env.BACKWORK_MCP_PUBLIC_URL;
 // Kept equal to package.json and server.json; test/registry-manifest.test.mjs checks it.
-export const SERVER_VERSION = "2.1.2";
+export const SERVER_VERSION = "2.1.3";
 const exposeUnavailableTools = process.env.BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS === "true";
 
 type AuthenticatedIncomingMessage = IncomingMessage & { auth?: AuthInfo };
@@ -542,7 +543,7 @@ function formatCode(code: any): string {
     lines.push("  Note: policy matches are code-list evidence and may include broader procedure families.");
     shown.forEach((p: SourcedCode) => {
       lines.push(`  - ${p.policy_id}: ${cleanText(p.title, 140)}`);
-      lines.push(`    Type: ${p.policy_type || "unknown"}, Disposition: ${p.disposition || "unknown"}${codeSourceNote(p.source)}`);
+      lines.push(`    Type: ${p.policy_type || "unknown"}, Disposition: ${p.disposition || "unknown"}${codeSourceNote(p.source)}${codeGroundingNote(p.grounding)}`);
       if (p.jurisdiction) lines.push(`    Jurisdiction: ${p.jurisdiction}`);
       if (p.source_url) lines.push(`    Source: ${p.source_url}`);
     });
@@ -571,6 +572,8 @@ function formatPolicy(policy: any, detailed = false): string {
   if (policy.source_url) lines.push(`Source: ${policy.source_url}`);
 
   if (detailed) {
+    const sourceAccuracy = formatSourceAccuracy(parseSourceCheck(policy.source_check));
+    if (sourceAccuracy) lines.push(`\n${sourceAccuracy}`);
     if (policy.summary) lines.push(`\nSummary: ${cleanText(policy.summary, 700)}`);
     else if (policy.description) lines.push(`\nDescription: ${cleanText(policy.description, 700)}`);
 
@@ -610,7 +613,7 @@ function formatPolicy(policy: any, detailed = false): string {
         const codeList = Array.isArray(codes) ? codes : [];
         lines.push(`\n[${system}] (${codeList.length} codes)`);
         codeList.slice(0, 8).forEach((c: SourcedCode) => {
-          lines.push(`  - ${c.code}: ${c.display || "No description"} [${c.disposition}]${codeSourceNote(c.source)}`);
+          lines.push(`  - ${c.code}: ${c.display || "No description"} [${c.disposition}]${codeSourceNote(c.source)}${codeGroundingNote(c.grounding)}`);
         });
         if (codeList.length > 8) lines.push(`  ... and ${codeList.length - 8} more codes`);
       });
@@ -652,7 +655,7 @@ function formatPriorAuth(result: any): string {
       if (p.codes?.length > 0) {
         lines.push("Codes:");
         p.codes.slice(0, 5).forEach((c: SourcedCode) => {
-          lines.push(`  - ${c.code} (${c.code_system}): ${c.disposition}${codeSourceNote(c.source)}`);
+          lines.push(`  - ${c.code} (${c.code_system}): ${c.disposition}${codeSourceNote(c.source)}${codeGroundingNote(c.grounding)}`);
         });
         if (p.codes.length > 5) lines.push(`  ... ${p.codes.length - 5} more codes omitted`);
       }
@@ -939,7 +942,7 @@ function formatBatchLookup(data: any): string {
     if (policies.length) {
       lines.push(`  Policies: ${policies.length} (${dispositionCounts(policies)})`);
       policies.slice(0, 3).forEach((policy: SourcedCode) => {
-        lines.push(`    - ${policy.policy_id}: ${cleanText(policy.title, 120)} [${policy.disposition ?? "unknown"}]${codeSourceNote(policy.source)}`);
+        lines.push(`    - ${policy.policy_id}: ${cleanText(policy.title, 120)} [${policy.disposition ?? "unknown"}]${codeSourceNote(policy.source)}${codeGroundingNote(policy.grounding)}`);
       });
       if (policies.length > 3) lines.push(`    ... ${policies.length - 3} more omitted`);
     }
@@ -1186,7 +1189,7 @@ function formatPolicyComparison(data: any): string {
     policies.slice(0, 4).forEach((policy: any) => {
       const codeList = (policy.codes ?? [])
         .slice(0, 5)
-        .map((code: SourcedCode) => `${code.code} ${code.disposition}${codeSourceNote(code.source)}`)
+        .map((code: SourcedCode) => `${code.code} ${code.disposition}${codeSourceNote(code.source)}${codeGroundingNote(code.grounding)}`)
         .join("; ");
       lines.push(`  - ${policy.policy_id}: ${cleanText(policy.title, 120)}${codeList ? ` [${codeList}]` : ""}`);
     });
@@ -1197,7 +1200,10 @@ function formatPolicyComparison(data: any): string {
   const national: any[] = Array.isArray(data?.national_policies) ? data.national_policies : [];
   if (national.length) {
     lines.push("\nNational policies (apply in every jurisdiction):");
-    national.slice(0, 5).forEach((policy: any) => lines.push(`  - ${policy.policy_id}: ${cleanText(policy.title, 120)}`));
+    national.slice(0, 5).forEach((policy: any) => {
+      const codes = (policy.codes ?? []).slice(0, 5).map((code: SourcedCode) => `${code.code} ${code.disposition}${codeSourceNote(code.source)}${codeGroundingNote(code.grounding)}`).join("; ");
+      lines.push(`  - ${policy.policy_id}: ${cleanText(policy.title, 120)}${codes ? ` [${codes}]` : ""}`);
+    });
   }
   return lines.join("\n");
 }
@@ -2156,6 +2162,7 @@ export async function handleMcpEndpointRequest(req: IncomingMessage, res: Server
   authenticatedReq.auth = authContext.authInfo;
 
   const transport = new StreamableHTTPServerTransport({
+    // SDK 1.32.1: undefined keeps the per-request hosted transport stateless (v1.x server docs).
     sessionIdGenerator: undefined,
   });
 
