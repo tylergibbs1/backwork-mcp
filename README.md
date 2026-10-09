@@ -283,7 +283,7 @@ npm run start:http
 node build/src/index.js --help
 ```
 
-Requires Node.js 18 or newer.
+Requires Node.js 18.14.1 or newer.
 
 ## Available Tools
 
@@ -380,7 +380,9 @@ Run the build and MCP metadata smoke test:
 npm test
 ```
 
-The smoke test starts the built stdio server with a dummy key, verifies the 8 workflow tools, checks titles, schemas, annotations, output schemas, `response_format`, and verifies local validation failures are reported with `isError: true`. The `test/` suite covers production availability, the hosted server's OAuth-only, read-only tool set, provenance, description quality and a lexical tool-selection check (no model calls), the registry manifest, and the ChatGPT cards: their templates in the tool list, the resources and mime type, each card's `structuredContent` against its schema, markdown for clients without UI, and a render of each card page in a stub browser for every action of every tool with a card, which must show a card or collapse to zero height.
+The smoke test starts the built stdio server with a dummy key, verifies the 8 workflow tools, checks titles, schemas, annotations, output schemas, `response_format`, and verifies local validation failures are reported with `isError: true`. The HTTP smoke also completes authenticated MCP initialization, lists the read-grant tools, and calls a tool with invalid arguments. The `test/` suite covers production availability, the hosted server's OAuth-only, read-only tool set, provenance, description quality and a lexical tool-selection check (no model calls), the registry manifest, and the ChatGPT cards: their templates in the tool list, the resources and mime type, each card's `structuredContent` against its schema, markdown for clients without UI, and a render of each card page in a stub browser for every action of every tool with a card, which must show a card or collapse to zero height.
+
+Before publishing, run `npm run verify:package`. It installs the packed tarball in a temporary consumer without repository overrides or a lockfile, then runs both transports on the current runtime and Node 18.20.8. CI runs the same check. Additional exact Node versions can be passed after `--`.
 
 ### API contract
 
@@ -399,7 +401,7 @@ The `evals/` directory includes a tool-discoverability evaluation and a read-onl
 
 ### SDK migration follow-up
 
-Release 2.1.3 keeps the v1 SDK and locks `@modelcontextprotocol/sdk` to 1.32.1. Its Hono Node adapter stays on patched 1.19.15 to preserve Node 18 support (minimum 18.14.1). The [official v2 migration guide](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/migration/upgrade-to-v2.md) requires a separate compatibility change:
+Release 2.1.4 bundles the v1 SDK 1.32.1, Zod, and their production dependencies from the committed lockfile. This carries the patched Hono Node adapter 1.19.15 into consumer installs and preserves Node 18 support (minimum 18.14.1). npm only honors overrides in the consumer's root package, so an override in this package cannot provide that guarantee. Use `npm ci` to reproduce the release tree and rerun package verification after updating the lockfile. The [official v2 migration guide](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/migration/upgrade-to-v2.md) requires a separate compatibility change:
 
 1. Raise the supported Node.js runtime from 18 to at least 20, including the hosted deployment and release workflow.
 2. Replace monolithic SDK imports with `@modelcontextprotocol/server`, `@modelcontextprotocol/node` for Node HTTP transport, and `@modelcontextprotocol/client` for clients and tests; use `@modelcontextprotocol/core` for public protocol schemas where needed.
@@ -421,7 +423,7 @@ Releases publish `@backwork/mcp` to npm with [Trusted Publishing](https://docs.n
 The `Release` workflow then:
 
 1. Fails unless the tag equals `v` + the `package.json` version.
-2. Runs `npm ci`, `npm test` (build, smoke tests, unit tests, OpenAPI contract), and `npm pack --dry-run`.
+2. Runs `npm ci`, `npm test` (build, smoke tests, unit tests, OpenAPI contract), `npm run verify:package` (clean consumer and Node 18 transports), and `npm pack --dry-run`.
 3. Publishes to npm with provenance, in the `npm` environment. A version already on npm is skipped, so a failed run can be re-run.
 4. Waits for the version to appear on npm, then runs `mcp-publisher login github-oidc` and `mcp-publisher publish`.
 

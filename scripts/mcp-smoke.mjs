@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { createRequire } from "node:module";
+import { resolve } from "node:path";
+
+const serverEntry = resolve(process.argv[2] || "build/src/index.js");
+const require = createRequire(serverEntry);
+const { Client } = require("@modelcontextprotocol/sdk/client/index.js");
+const { StdioClientTransport } = require("@modelcontextprotocol/sdk/client/stdio.js");
 
 const toolNames = [
   "coverage_lookup",
@@ -14,8 +19,8 @@ const toolNames = [
 ];
 
 const transport = new StdioClientTransport({
-  command: "node",
-  args: ["build/src/index.js"],
+  command: process.execPath,
+  args: [serverEntry],
   env: {
     ...process.env,
     BACKWORK_API_KEY: "bwk_test_dummy",
@@ -59,7 +64,7 @@ try {
   });
   assert.equal(invalidPolicyCall.isError, true, "local validation errors should be tool errors");
 
-  console.log(`MCP smoke test passed: ${tools.length} tools verified.`);
+  console.log(`MCP smoke test passed: ${tools.length} tools verified on ${process.version}.`);
 } finally {
   await client.close();
 }

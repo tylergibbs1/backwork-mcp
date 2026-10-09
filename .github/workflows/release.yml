@@ -44,6 +44,7 @@ jobs:
       # Builds, runs the smoke tests and unit tests (including server.json vs
       # package.json version agreement), and checks the OpenAPI contract.
       - run: npm test
+      - run: npm run verify:package
       - run: npm pack --dry-run
 
       - name: Publish to npm
@@ -58,6 +59,7 @@ jobs:
   mcp-registry:
     needs: npm
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     permissions:
       contents: read
       id-token: write
@@ -74,19 +76,22 @@ jobs:
           package-manager-cache: false
 
       # The registry verifies ownership by reading mcpName from the published
-      # npm package, so wait until the new version is visible.
+      # npm package, so wait until the new version is visible. Trusted publishes
+      # can be accepted for processing before their metadata becomes readable.
       - name: Wait for the npm release to be visible
         run: |
           version="$(node -p "require('./package.json').version")"
           expected="$(node -p "require('./server.json').name")"
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 60); do
             actual="$(npm view "@backwork/mcp@${version}" mcpName 2>/dev/null || true)"
             if [ "$actual" = "$expected" ]; then
               echo "@backwork/mcp@${version} is live with mcpName ${actual}"
               exit 0
             fi
-            echo "Attempt ${attempt}: waiting for @backwork/mcp@${version} on npm"
-            sleep 10
+            if [ "$attempt" -eq 1 ] || [ $((attempt % 10)) -eq 0 ]; then
+              echo "Attempt ${attempt}: waiting for @backwork/mcp@${version} on npm"
+            fi
+            sleep 30
           done
           echo "::error::@backwork/mcp@${version} with mcpName ${expected} never appeared on npm"
           exit 1

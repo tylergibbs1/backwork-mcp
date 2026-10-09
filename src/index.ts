@@ -72,7 +72,7 @@ const oauthExpectedAudiences = parseDelimitedList(process.env.BACKWORK_MCP_OAUTH
 const oauthResourceOverride = process.env.BACKWORK_MCP_OAUTH_RESOURCE;
 const publicUrlOverride = process.env.BACKWORK_MCP_PUBLIC_URL;
 // Kept equal to package.json and server.json; test/registry-manifest.test.mjs checks it.
-export const SERVER_VERSION = "2.1.3";
+export const SERVER_VERSION = "2.1.4";
 const exposeUnavailableTools = process.env.BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS === "true";
 
 type AuthenticatedIncomingMessage = IncomingMessage & { auth?: AuthInfo };
