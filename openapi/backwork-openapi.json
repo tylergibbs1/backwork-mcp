@@ -9391,6 +9391,17 @@
             "examples": [
               "https://backworkhealth.com/policy/L33831"
             ]
+          },
+          "source_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceCheck"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source provenance for this policy; null only when the policy is no longer on record."
           }
         },
         "required": [
@@ -9402,7 +9413,8 @@
           "source_url",
           "effective_date",
           "last_verified_at",
-          "public_url"
+          "public_url",
+          "source_check"
         ]
       },
       "ClaimValidationRequest": {
@@ -9749,6 +9761,16 @@
           "codes"
         ]
       },
+      "CodeGrounding": {
+        "type": "string",
+        "enum": [
+          "grounded",
+          "not_grounded",
+          "no_source_text",
+          "not_checked"
+        ],
+        "description": "Whether Backwork found this code in the source text it retained for the policy. grounded: found in the retained source text. not_grounded: Backwork's document pipeline read the code, but it is not in the retained source text. no_source_text: Backwork retained no source text to check. not_checked: not checked; always the value for codes inferred from the policy title."
+      },
       "CodeLookupData": {
         "type": "object",
         "properties": {
@@ -9867,6 +9889,9 @@
           "source": {
             "$ref": "#/components/schemas/CodeSource"
           },
+          "grounding": {
+            "$ref": "#/components/schemas/CodeGrounding"
+          },
           "jurisdiction": {
             "type": [
               "string",
@@ -9899,6 +9924,17 @@
             "examples": [
               "https://backworkhealth.com/policy/L33831"
             ]
+          },
+          "source_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceCheck"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source provenance for this policy; null only when the policy is no longer on record."
           }
         },
         "required": [
@@ -9907,10 +9943,12 @@
           "policy_type",
           "disposition",
           "source",
+          "grounding",
           "jurisdiction",
           "effective_date",
           "source_url",
-          "public_url"
+          "public_url",
+          "source_check"
         ]
       },
       "CodeSource": {
@@ -10081,6 +10119,17 @@
               "https://backworkhealth.com/policy/L33831"
             ]
           },
+          "source_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceCheck"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source provenance for this policy; null only when the policy is no longer on record."
+          },
           "is_national": {
             "description": "True for national policies, which apply to every jurisdiction",
             "type": "boolean"
@@ -10101,13 +10150,17 @@
                 },
                 "source": {
                   "$ref": "#/components/schemas/CodeSource"
+                },
+                "grounding": {
+                  "$ref": "#/components/schemas/CodeGrounding"
                 }
               },
               "required": [
                 "code",
                 "code_system",
                 "disposition",
-                "source"
+                "source",
+                "grounding"
               ]
             }
           }
@@ -10119,6 +10172,7 @@
           "effective_date",
           "source_url",
           "public_url",
+          "source_check",
           "codes"
         ]
       },
@@ -10301,13 +10355,25 @@
                 "examples": [
                   "https://backworkhealth.com/policy/L33831"
                 ]
+              },
+              "source_check": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SourceCheck"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Source provenance for this policy; null only when the policy is no longer on record."
               }
             },
             "required": [
               "policy_id",
               "title",
               "policy_type",
-              "public_url"
+              "public_url",
+              "source_check"
             ]
           }
         },
@@ -10478,6 +10544,17 @@
                 "examples": [
                   "https://backworkhealth.com/policy/L33831"
                 ]
+              },
+              "source_check": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SourceCheck"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Source provenance for this policy; null only when the policy is no longer on record."
               }
             },
             "required": [
@@ -10486,7 +10563,8 @@
               "policy_type",
               "jurisdiction",
               "effective_date",
-              "public_url"
+              "public_url",
+              "source_check"
             ]
           }
         },
@@ -11717,6 +11795,9 @@
           },
           "source": {
             "$ref": "#/components/schemas/CodeSource"
+          },
+          "grounding": {
+            "$ref": "#/components/schemas/CodeGrounding"
           }
         },
         "required": [
@@ -11725,7 +11806,8 @@
           "disposition",
           "condition_reference",
           "notes",
-          "source"
+          "source",
+          "grounding"
         ]
       },
       "PolicyCompareRequest": {
@@ -12018,6 +12100,17 @@
               "https://backworkhealth.com/policy/L33831"
             ]
           },
+          "source_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceCheck"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source provenance for this policy; null only when the policy is no longer on record."
+          },
           "source_shape": {
             "$ref": "#/components/schemas/SourceShape"
           },
@@ -12234,6 +12327,7 @@
           "description",
           "summary",
           "public_url",
+          "source_check",
           "source_shape",
           "source_shape_reason",
           "specialty",
@@ -12331,6 +12425,17 @@
               "https://backworkhealth.com/policy/L33831"
             ]
           },
+          "source_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceCheck"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source provenance for this policy; null only when the policy is no longer on record."
+          },
           "source_shape": {
             "$ref": "#/components/schemas/SourceShape"
           },
@@ -12362,13 +12467,17 @@
                 },
                 "source": {
                   "$ref": "#/components/schemas/CodeSource"
+                },
+                "grounding": {
+                  "$ref": "#/components/schemas/CodeGrounding"
                 }
               },
               "required": [
                 "code",
                 "code_system",
                 "disposition",
-                "source"
+                "source",
+                "grounding"
               ]
             }
           },
@@ -12425,6 +12534,7 @@
           "source_url",
           "payer_slug",
           "public_url",
+          "source_check",
           "source_shape",
           "source_shape_reason"
         ]
@@ -12591,6 +12701,17 @@
                     "https://backworkhealth.com/policy/L33831"
                   ]
                 },
+                "source_check": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SourceCheck"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Source provenance for this policy; null only when the policy is no longer on record."
+                },
                 "payer": {
                   "anyOf": [
                     {
@@ -12624,6 +12745,9 @@
                       },
                       "source": {
                         "$ref": "#/components/schemas/CodeSource"
+                      },
+                      "grounding": {
+                        "$ref": "#/components/schemas/CodeGrounding"
                       }
                     },
                     "required": [
@@ -12631,7 +12755,8 @@
                       "code_system",
                       "disposition",
                       "condition_reference",
-                      "source"
+                      "source",
+                      "grounding"
                     ]
                   }
                 }
@@ -12645,6 +12770,7 @@
                 "effective_date",
                 "last_verified_at",
                 "public_url",
+                "source_check",
                 "payer",
                 "codes"
               ]
@@ -13176,6 +13302,17 @@
               "https://backworkhealth.com/policy/L33831"
             ]
           },
+          "source_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceCheck"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source provenance for this policy; null only when the policy is no longer on record."
+          },
           "payer": {
             "anyOf": [
               {
@@ -13198,6 +13335,7 @@
           "effective_date",
           "last_verified_at",
           "public_url",
+          "source_check",
           "payer"
         ]
       },
@@ -13746,6 +13884,139 @@
         "maxLength": 64,
         "pattern": "^[0-9a-f]{64}$",
         "description": "Lowercase hexadecimal SHA-256 digest"
+      },
+      "SourceAccuracy": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "overall",
+              "title",
+              "effective_date",
+              "codes",
+              "link"
+            ],
+            "description": "What the audit measured: `overall` for the policy record as a whole, or one field of it (`title`, `effective_date`, `codes`, `link`)."
+          },
+          "sampled_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the audit drew its sample."
+          },
+          "sample_size": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "How many of this source's policy records the audit sampled.",
+            "examples": [
+              120
+            ]
+          },
+          "accuracy": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Share of the sampled records whose `field` matched the source document, from 0 to 1: the records that matched divided by `sample_size`.",
+            "examples": [
+              0.9667
+            ]
+          },
+          "ci_low": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Lower bound of the 95% Wilson score confidence interval for `accuracy`.",
+            "examples": [
+              0.917
+            ]
+          },
+          "ci_high": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Upper bound of the 95% Wilson score confidence interval for `accuracy`.",
+            "examples": [
+              0.987
+            ]
+          },
+          "method": {
+            "type": "string",
+            "description": "How the audit decided whether a sampled record matched its source, as Backwork names the method.",
+            "examples": [
+              "manual_review_v1"
+            ]
+          }
+        },
+        "required": [
+          "field",
+          "sampled_at",
+          "sample_size",
+          "accuracy",
+          "ci_low",
+          "ci_high",
+          "method"
+        ],
+        "description": "The most recent audit of one field for the policy's source. It measures a sample of the source's policy records, not this policy alone."
+      },
+      "SourceCheck": {
+        "type": "object",
+        "properties": {
+          "source_url": {
+            "type": "string",
+            "description": "The URL Backwork fetches this policy from.",
+            "examples": [
+              "https://www.cms.gov/medicare-coverage-database/view/lcd.aspx?lcdid=33831"
+            ]
+          },
+          "last_fetched_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When Backwork last fetched the policy from `source_url`; null when no fetch time is recorded. The payer may have changed the document since."
+          },
+          "content_sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "SHA-256 of the content Backwork fetched, as 64 lowercase hex characters; null when the loader did not record one. Compare it across responses to see whether the fetched content changed.",
+            "examples": [
+              "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+            ]
+          },
+          "source_accuracy": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SourceAccuracy"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The latest audit for each field Backwork has audited for this policy's source, `overall` first. null when the policy has no recorded source or its source has no audit yet."
+          }
+        },
+        "required": [
+          "source_url",
+          "last_fetched_at",
+          "content_sha256",
+          "source_accuracy"
+        ],
+        "description": "Where and when Backwork last fetched this policy, a hash of the fetched content, and the sampled accuracy that audits measured for its source."
       },
       "SourceShape": {
         "type": "string",

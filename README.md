@@ -291,7 +291,7 @@ Tool names use the `backwork_` prefix for discoverability when this server is in
 
 All tools include `title`, `description`, `inputSchema`, `outputSchema`, and MCP annotations. Each tool states its own annotations; the server refuses to start if a tool marked read-only offers a write-scope operation, or one marked non-destructive offers a `DELETE`. Successful calls return readable text plus `structuredContent` with `message`, and when available, Backwork API `data` and `meta`.
 
-`data` and `meta` are projections: they carry only the response fields `src/api-operations.ts` lists for the operation (`reads` and `metaReads`). Request IDs, response timestamps, record timestamps, research-job cost and polling URLs, idempotency keys, and model names are dropped. Policy effective and last-reviewed dates are kept. The server logs the request ID of a failed API call.
+`data` and `meta` are projections: they carry only the response fields `src/api-operations.ts` lists for the operation (`reads` and `metaReads`). Request IDs, response timestamps, record timestamps, research-job cost and polling URLs, idempotency keys, and model names are dropped. Policy effective and last-reviewed dates, source fetch times, and source audit sample times are kept. The server logs the request ID of a failed API call.
 
 Tool-level failures return `isError: true`. Billing and rate-limit failures are reported in plain terms and never repeat the API's hint, plan names, or pricing links: a feature outside the organization's plan, no remaining request credits, or a rate limit with when to retry. `test/output-guard.test.mjs` runs every tool action against fixture responses and those errors, and fails on upsell wording, trace IDs, timestamps, cost, or model fields.
 
@@ -303,11 +303,24 @@ When the Backwork API response cites policy documents, `structuredContent.proven
 | --- | --- |
 | `source_urls` | Distinct source document URLs |
 | `authorities` | Issuing authorities, for example `CMS` or a payer name |
-| `retrieved_at` | Oldest time Backwork fetched any cited source |
+| `retrieved_at` | Oldest fetch time when every cited source has a known time; otherwise `null` |
 | `as_of` | Latest effective date among the cited sources |
 | `sources[]` | `policy_id`, `source_url`, `authority`, `retrieved_at`, `as_of` per source |
 
-Values are copied from the API response (`source_url`, `effective_date`, `last_verified_at`, the policy type, and the payer). A value the API did not return is `null`. The shape matches the `provenance` block on Backwork agent tool results, which is passed through unchanged.
+Values come from the API response. `source_check.source_url` and `source_check.last_fetched_at` take precedence over legacy source metadata. An explicit unknown fetch time stays `null`; legacy `retrieved_at`, `last_verified_at`, or `crawled_at` are fallback values only when the source-check block is absent. Known fetch times remain available in `sources[]` when another cited source has an unknown time. The shape matches the `provenance` block on Backwork agent tool results.
+
+Policy evidence also retains the API's `source_check`: source URL, last fetch time, fetched-content SHA-256, and `source_accuracy` audit samples. Each audit reports the field measured, sample date and size, share of sampled records that matched, 95% Wilson interval, and method. **These samples measure records from a source; they do not measure certainty for the individual policy or a coverage decision.** Missing audits stay `null`. Cards show fetch dates and expandable source sample audits.
+
+Code matches retain `grounding` separately from their extraction `source`:
+
+| `grounding` | Meaning |
+| --- | --- |
+| `grounded` | Found in Backwork's retained source text |
+| `not_grounded` | Read by the document pipeline, but not found in retained source text |
+| `no_source_text` | No retained text was available to check |
+| `not_checked` | Grounding was not checked, including codes inferred from a policy title |
+
+Text and cards label these checks without treating a grounded code as a coverage guarantee. An older response that omits grounding remains unknown, and an unrecognized future value is preserved and labelled.
 
 ### Production availability
 
@@ -383,6 +396,15 @@ npm run contract:check
 ```
 
 The `evals/` directory includes a tool-discoverability evaluation and a read-only data evaluation built from fixed source-backed policy/code records. Refresh the read-only answers intentionally when Backwork source data is updated.
+
+### SDK migration follow-up
+
+Release 2.1.3 keeps the v1 SDK and locks `@modelcontextprotocol/sdk` to 1.32.1. Its Hono Node adapter stays on patched 1.19.15 to preserve Node 18 support (minimum 18.14.1). The [official v2 migration guide](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/migration/upgrade-to-v2.md) requires a separate compatibility change:
+
+1. Raise the supported Node.js runtime from 18 to at least 20, including the hosted deployment and release workflow.
+2. Replace monolithic SDK imports with `@modelcontextprotocol/server`, `@modelcontextprotocol/node` for Node HTTP transport, and `@modelcontextprotocol/client` for clients and tests; use `@modelcontextprotocol/core` for public protocol schemas where needed.
+3. Upgrade the declared Zod range to at least 4.2 and wrap tool input/output schemas as Standard Schema objects, preserving field descriptions and structured-output validation.
+4. Verify tool discovery, stdio, stateless HTTP lifecycle, OAuth discovery and scopes, widgets, output minimization, and the live OpenAPI contract before publishing that migration.
 
 ## MCP Registry
 

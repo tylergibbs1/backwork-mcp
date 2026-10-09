@@ -1,4 +1,5 @@
 import type { PriorAuthVerdict } from "../prior-auth-verdict.js";
+import type { SourceCheck } from "../source-check.js";
 import type { ComponentKind, ViewKind, WidgetView } from "./schemas.js";
 
 /**
@@ -53,6 +54,16 @@ export function renderWidget(view: WidgetView): string {
   };
   const sourceLabel = (source: string | null, label: string | null): string =>
     label ? `<span class="source${source === "document" ? "" : " flagged"}">${esc(label)}</span>` : "";
+  const groundingLabel = (code: { grounding?: string | null; grounding_label?: string | null }): string =>
+    sourceLabel(code.grounding === "grounded" ? "document" : "unrecognized", code.grounding_label ?? null);
+  const sourceEvidence = (policy: { retrieved_at?: string | null; source_check?: SourceCheck | null }): string => {
+    const fetched = policy.retrieved_at ? `Last fetched ${policy.retrieved_at.slice(0, 10)}` : "Fetch time unknown";
+    const audits = policy.source_check?.source_accuracy;
+    if (!audits?.length) return `<p class="muted">${esc(fetched)}</p>`;
+    const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
+    const rows = audits.map((audit) => `<li>${esc(audit.field)}: ${esc(percent(audit.accuracy))} matched in ${esc(audit.sample_size)} sampled records; 95% interval ${esc(percent(audit.ci_low))}–${esc(percent(audit.ci_high))}; sampled ${esc(audit.sampled_at.slice(0, 10))}; ${esc(audit.method)}</li>`);
+    return `<p class="muted">${esc(fetched)}</p><details class="muted"><summary>Source sample audits</summary><p>These samples measure this source's records, not certainty for this policy.</p><ul class="list">${rows.join("")}</ul></details>`;
+  };
   type Linked = { policy_id: string; title: string; link: { kind: "backwork" | "source"; url: string } | null };
   /** `text` defaults to "Open policy" for a Backwork page and "Open source document" for a payer or CMS document. */
   const link = (policy: Linked, text?: string): string => {
@@ -91,12 +102,13 @@ ${body}
           : "The prior-auth check gave no answer for these codes.";
     const policies = view.policies.map((policy) => {
       const codes = policy.codes
-        .map((code) => `<li><span class="code">${esc(code.code)}</span>${badge(code.disposition)}${sourceLabel(code.source, code.source_label)}</li>`)
+        .map((code) => `<li><span class="code">${esc(code.code)}</span>${badge(code.disposition)}${sourceLabel(code.source, code.source_label)}${groundingLabel(code)}</li>`)
         .join("");
       return `<section class="policy">
 <p class="eyebrow">${esc(join([policy.payer, policy.jurisdiction, policy.policy_type]))}</p>
 <h3>${esc(policy.title)}</h3>
 <p class="muted">${esc(join([`Policy ${policy.policy_id}`, policy.effective_date && `Effective ${policy.effective_date}`]))}</p>
+${sourceEvidence(policy)}
 <ul class="codes">${codes}</ul>${more(policy.codes_omitted, "codes")}
 ${link(policy)}
 </section>`;
@@ -116,7 +128,7 @@ ${more(view.policies_omitted, "policies")}
         : priorAuthPill(view.prior_auth, false);
     const subtitle = join([view.prior_auth.confidence && `${view.prior_auth.confidence} confidence`, view.mac && join([view.mac.name, view.mac.jurisdiction], " ")]);
     const codes = view.codes_requiring_pa
-      .map((code) => `<li><span class="code">${esc(code.code)}</span><span class="muted">${esc(code.policy_id)}</span>${sourceLabel(code.source, code.source_label)}</li>`)
+      .map((code) => `<li><span class="code">${esc(code.code)}</span><span class="muted">${esc(code.policy_id)}</span>${sourceLabel(code.source, code.source_label)}${groundingLabel(code)}</li>`)
       .join("");
     const documentation = view.documentation.map(
       (item) => `<span class="box" aria-hidden="true"></span>${esc(item.text)}${item.mandatory === true ? ' <span class="tag">Required</span>' : ""}`,
@@ -132,7 +144,7 @@ ${more(view.policies_omitted, "policies")}
       (policy) =>
         `${link(policy, policy.title) || esc(policy.title)} <span class="muted">${esc(
           join([policy.policy_id !== policy.title && policy.policy_id, policy.payer, policy.effective_date && `Effective ${policy.effective_date}`]),
-        )}</span>`,
+        )}</span>${sourceEvidence(policy)}`,
     );
     const pending =
       view.status === "pending" || view.status === "running"
@@ -155,6 +167,7 @@ ${section("Citations", list(citations, true))}
 <p class="eyebrow">${esc(join([policy.payer, policy.jurisdiction, policy.policy_type]))}</p>
 <p class="row"><strong>${esc(policy.title)}</strong>${retired(policy.status)}</p>
 <p class="muted">${esc(join([`Policy ${policy.policy_id}`, policy.effective_date && `Effective ${policy.effective_date}`]))}</p>
+${sourceEvidence(policy)}
 ${policy.summary ? `<p class="excerpt">${esc(policy.summary)}</p>` : ""}${link(policy)}
 </li>`,
     );
@@ -180,7 +193,7 @@ ${policy.summary ? `<p class="excerpt">${esc(policy.summary)}</p>` : ""}${link(p
         (code) =>
           `<li><span class="code">${esc(code.code)}</span>${badge(code.disposition)}${code.display ? `<span class="muted">${esc(code.display)}</span>` : ""}${
             code.source === "document" ? "" : sourceLabel(code.source, code.source_label)
-          }</li>`,
+          }${groundingLabel(code)}</li>`,
       )
       .join("");
     return `<article class="card" aria-label="Backwork policy">
@@ -188,7 +201,7 @@ ${policy.summary ? `<p class="excerpt">${esc(policy.summary)}</p>` : ""}${link(p
 <header><h2>${esc(policy.title)}</h2>${retired(policy.status)}</header>
 <p class="muted">${esc(
       join([`Policy ${policy.policy_id}`, policy.effective_date && `Effective ${policy.effective_date}`, policy.last_reviewed_date && `Reviewed ${policy.last_reviewed_date}`]),
-    )}</p></div>
+    )}</p>${sourceEvidence(policy)}</div>
 ${policy.summary ? `<p class="reason">${esc(policy.summary)}</p>` : ""}
 ${section("Criteria", criteria ? `<ul class="items">${criteria}</ul>` : "")}
 ${section("Codes", codes ? `<ul class="codes">${codes}</ul>${more(view.codes_omitted, "codes")}` : "")}
@@ -202,6 +215,7 @@ ${link(policy)}
 <p class="row"><span class="tag">${esc(titleCase(item.section))}</span><span class="muted">${esc(join([item.policy.policy_id, item.policy.payer, item.policy.jurisdiction]))}</span></p>
 <p class="excerpt">${esc(item.text)}</p>
 <p class="muted">${link(item.policy, item.policy.title) || esc(item.policy.title)}</p>
+${sourceEvidence(item.policy)}
 </li>`,
     );
     return card(
@@ -252,7 +266,7 @@ ${change.summary ? `<p class="muted">${esc(change.summary)}</p>` : ""}
             (cell) =>
               `<td>${badge(cell.disposition)}${cell.policy_id ? `<span class="muted block">${esc(cell.policy_id)}${cell.more ? ` +${cell.more}` : ""}</span>` : ""}${
                 cell.source === "document" ? "" : sourceLabel(cell.source, cell.source_label)
-              }</td>`,
+              }${groundingLabel(cell)}</td>`,
           )
           .join("")}</tr>`,
     )
@@ -276,7 +290,7 @@ ${change.summary ? `<p class="muted">${esc(change.summary)}</p>` : ""}
   const policyLinks = view.policies
     .filter((policy) => safeUrl(policy.link))
     .slice(0, 6)
-    .map((policy) => `${link(policy, policy.policy_id)} <span class="muted">${esc(policy.title)}</span>`);
+    .map((policy) => `${link(policy, policy.policy_id)} <span class="muted">${esc(policy.title)}</span>${sourceEvidence(policy)}`);
   const notes = [
     view.unresolved_jurisdictions.length ? `No active contractor for ${esc(view.unresolved_jurisdictions.join(", "))}.` : "",
     view.columns_omitted ? `${view.columns_omitted} more jurisdictions not shown; compare fewer at a time to see them.` : "",

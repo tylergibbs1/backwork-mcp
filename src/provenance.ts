@@ -64,6 +64,14 @@ function isoDateTime(value: unknown): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+/** An explicit source check owns freshness, even when its fetch time is unknown. */
+export function sourceFetchedAt(record: JsonRecord): string | null {
+  if ("source_check" in record) {
+    return isRecord(record.source_check) ? isoDateTime(record.source_check.last_fetched_at) : null;
+  }
+  return isoDateTime(record.retrieved_at ?? record.last_verified_at ?? record.crawled_at);
+}
+
 function isoDate(value: unknown): string | null {
   const candidate = text(value);
   if (!candidate || !/^\d{4}-\d{2}-\d{2}/.test(candidate)) return null;
@@ -83,15 +91,20 @@ export function authorityOf(record: JsonRecord): string | null {
 
 /** A record cites a source when it names a source document. */
 function isSourceRecord(record: JsonRecord): boolean {
-  return "source_url" in record && (text(record.policy_id) !== null || httpUrl(record.source_url) !== null);
+  const check = isRecord(record.source_check) ? record.source_check : null;
+  return (
+    ("source_url" in record || "source_check" in record) &&
+    (text(record.policy_id) !== null || (httpUrl(check?.source_url) ?? httpUrl(record.source_url)) !== null)
+  );
 }
 
 function sourceFromRecord(record: JsonRecord): ProvenanceSource {
+  const check = isRecord(record.source_check) ? record.source_check : null;
   return {
     policy_id: text(record.policy_id) ?? text(record.source_id),
-    source_url: httpUrl(record.source_url),
+    source_url: httpUrl(check?.source_url) ?? httpUrl(record.source_url),
     authority: authorityOf(record),
-    retrieved_at: isoDateTime(record.retrieved_at ?? record.last_verified_at ?? record.crawled_at),
+    retrieved_at: sourceFetchedAt(record),
     as_of: isoDate(record.as_of ?? record.effective_date),
   };
 }
@@ -100,7 +113,9 @@ function isProvenanceBlock(value: unknown): value is Provenance {
   return provenanceSchema.safeParse(value).success;
 }
 
-function collect(value: unknown, depth: number, into: ProvenanceSource[]): void {
+type SourceCandidate = { source: ProvenanceSource; checked: boolean };
+
+function collect(value: unknown, depth: number, into: SourceCandidate[]): void {
   if (depth > MAX_DEPTH) return;
   if (Array.isArray(value)) {
     for (const item of value) collect(item, depth + 1, into);
@@ -110,12 +125,13 @@ function collect(value: unknown, depth: number, into: ProvenanceSource[]): void 
 
   // An upstream provenance block (Backwork agent tools) is passed through as is.
   if (isProvenanceBlock(value.provenance)) {
-    into.push(...value.provenance.sources);
+    into.push(...value.provenance.sources.map((source) => ({ source, checked: false })));
   }
-  if (isSourceRecord(value)) into.push(sourceFromRecord(value));
+  if (isSourceRecord(value)) into.push({ source: sourceFromRecord(value), checked: "source_check" in value });
 
   for (const [key, child] of Object.entries(value)) {
-    if (key === "provenance") continue;
+    // A source check is evidence for its parent policy, not a separate citation.
+    if (key === "provenance" || key === "source_check") continue;
     collect(child, depth + 1, into);
   }
 }
@@ -124,46 +140,63 @@ function distinct(values: Array<string | null>): string[] {
   return [...new Set(values.filter((value): value is string => value !== null))];
 }
 
-/** One entry per cited document; a field missing from one mention is taken from another. */
-function mergeDuplicates(sources: readonly ProvenanceSource[]): ProvenanceSource[] {
-  const byDocument = new Map<string, ProvenanceSource>();
-  for (const source of sources) {
+/** One entry per cited document, respecting authoritative fetch checks across mentions. */
+function mergeDuplicates(sources: readonly SourceCandidate[]): ProvenanceSource[] {
+  const byDocument = new Map<string, SourceCandidate>();
+  for (const candidate of sources) {
+    const { source, checked } = candidate;
     const key = `${source.policy_id ?? ""}|${source.source_url ?? ""}`;
-    const seen = byDocument.get(key);
+    const prior = byDocument.get(key);
+    if (!prior) {
+      byDocument.set(key, candidate);
+      continue;
+    }
+    const seen = prior.source;
+    // A new source check wins over legacy metadata, including an unknown time.
+    // Conflicting checks remain conservative: both must have a known fetch time.
+    const retrieved = checked !== prior.checked
+      ? (checked ? source.retrieved_at : seen.retrieved_at)
+      : checked
+        ? (seen.retrieved_at && source.retrieved_at ? [seen.retrieved_at, source.retrieved_at].sort()[0] : null)
+        : seen.retrieved_at ?? source.retrieved_at;
     byDocument.set(
       key,
-      seen
-        ? {
-            policy_id: seen.policy_id ?? source.policy_id,
-            source_url: seen.source_url ?? source.source_url,
-            authority: seen.authority ?? source.authority,
-            retrieved_at: seen.retrieved_at ?? source.retrieved_at,
-            as_of: seen.as_of ?? source.as_of,
-          }
-        : source,
+      {
+        checked: checked || prior.checked,
+        source: {
+          policy_id: seen.policy_id ?? source.policy_id,
+          source_url: seen.source_url ?? source.source_url,
+          authority: seen.authority ?? source.authority,
+          retrieved_at: retrieved,
+          as_of: seen.as_of ?? source.as_of,
+        },
+      },
     );
   }
-  return [...byDocument.values()];
+  return [...byDocument.values()].map((candidate) => candidate.source);
 }
 
-export function buildProvenance(sources: readonly ProvenanceSource[]): Provenance {
-  const unique = mergeDuplicates(sources);
+function assembleProvenance(unique: ProvenanceSource[]): Provenance {
   const retrievedAt = distinct(unique.map((source) => source.retrieved_at)).sort();
   const asOf = distinct(unique.map((source) => source.as_of)).sort();
   return {
     source_urls: distinct(unique.map((source) => source.source_url)),
     authorities: distinct(unique.map((source) => source.authority)).sort(),
-    retrieved_at: retrievedAt[0] ?? null,
+    retrieved_at: unique.every((source) => source.retrieved_at !== null) ? retrievedAt[0] ?? null : null,
     as_of: asOf.at(-1) ?? null,
     sources: unique,
   };
 }
 
+export function buildProvenance(sources: readonly ProvenanceSource[]): Provenance {
+  return assembleProvenance(mergeDuplicates(sources.map((source) => ({ source, checked: false }))));
+}
+
 /** Provenance for an API response, or undefined when it cites no source. */
 export function extractProvenance(data: unknown): Provenance | undefined {
-  const sources: ProvenanceSource[] = [];
+  const sources: SourceCandidate[] = [];
   collect(data, 0, sources);
-  return sources.length > 0 ? buildProvenance(sources) : undefined;
+  return sources.length > 0 ? assembleProvenance(mergeDuplicates(sources)) : undefined;
 }
 
 /** A short citation footer for the readable text output. */
@@ -175,6 +208,10 @@ export function formatProvenance(provenance: Provenance, maxUrls = 5): string {
   ].filter(Boolean);
   if (provenance.authorities.length) lines.push(`Authority: ${provenance.authorities.join(", ")}`);
   if (currency.length) lines.push(`Currency: ${currency.join("; ")}`);
+  if (provenance.retrieved_at === null) {
+    const missing = provenance.sources.filter((source) => source.retrieved_at === null).length;
+    lines.push(`Fetch time unknown for ${missing} of ${provenance.sources.length} cited sources.`);
+  }
   provenance.source_urls.slice(0, maxUrls).forEach((url) => lines.push(`- ${url}`));
   const remaining = provenance.source_urls.length - maxUrls;
   if (remaining > 0) lines.push(`... ${remaining} more in structuredContent.provenance`);

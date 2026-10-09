@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { priorAuthVerdictSchema } from "../prior-auth-verdict.js";
+import { sourceCheckSchema } from "../source-check.js";
 
 /**
  * The view models the UI components render. A tool that has a component
@@ -19,6 +20,8 @@ export const widgetCodeSchema = z.object({
   source: codeSourceKind,
   /** Text shown next to the code, e.g. "Inferred from policy title". */
   source_label: z.string(),
+  grounding: z.string().nullable().optional().describe("Retained-text grounding reported by the API; null for older responses."),
+  grounding_label: z.string().nullable().optional(),
 });
 
 export const widgetPolicySchema = z.object({
@@ -29,6 +32,8 @@ export const widgetPolicySchema = z.object({
   payer: z.string().nullable(),
   jurisdiction: z.string().nullable(),
   effective_date: z.string().nullable(),
+  retrieved_at: z.string().nullable().optional(),
+  source_check: sourceCheckSchema.nullable().optional(),
   /** Backwork's public page for the policy when there is one, else its http(s) source document; null when neither. */
   link: z.object({ kind: z.enum(["backwork", "source"]), url: z.string() }).nullable(),
 });
@@ -66,6 +71,8 @@ export const comparisonCellSchema = z.object({
   policy_id: z.string().nullable(),
   source: codeSourceKind.nullable(),
   source_label: z.string().nullable(),
+  grounding: z.string().nullable().optional(),
+  grounding_label: z.string().nullable().optional(),
   /** Further policies in this column that also list the code. */
   more: z.number().int().nonnegative(),
 });
