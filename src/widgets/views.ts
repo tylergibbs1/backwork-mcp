@@ -1,4 +1,5 @@
 import { codeGroundingLabel, codeSourceLabel, parseCodeSource } from "../code-source.js";
+import { parseApplicability } from "../applicability.js";
 import { policyLink } from "../policy-links.js";
 import { parsePriorAuthCheck, parseResearchDetermination } from "../prior-auth-verdict.js";
 import { authorityOf, httpUrl, sourceFetchedAt } from "../provenance.js";
@@ -104,6 +105,7 @@ function widgetPolicy(record: JsonRecord): WidgetPolicy | null {
     policy_type: policyType,
     payer: authorityOf(record),
     jurisdiction: str(record.jurisdiction),
+    ...parseApplicability(record),
     effective_date: str(record.effective_date),
     retrieved_at: sourceFetchedAt(record),
     source_check: parseSourceCheck(record.source_check),
@@ -137,6 +139,7 @@ function addCode(groups: Map<string, PolicyGroup>, policy: WidgetPolicy, code: W
     group.source_check = policy.source_check;
     group.retrieved_at = policy.retrieved_at;
   }
+  if (group.applicability_scope == null && policy.applicability_scope != null) Object.assign(group, parseApplicability(policy));
   const existing = group.codes.find((entry) => entry.code === code.code);
   if (!existing) group.codes.push(code);
   else if (existing.grounding == null && code.grounding != null) {
@@ -174,6 +177,7 @@ export function buildCoverageCard(codesRequested: string[], data: { code_details
     kind: "coverage_card",
     codes_requested: codesRequested,
     prior_auth: priorAuth ? parsePriorAuthCheck(priorAuth) : null,
+    ...(typeof priorAuth?.requires_manual_review === "boolean" ? { requires_manual_review: priorAuth.requires_manual_review } : {}),
     policies: policies.slice(0, MAX_POLICIES).map((policy) => ({
       ...policy,
       codes: policy.codes.slice(0, MAX_CODES_PER_POLICY),
@@ -221,6 +225,7 @@ export function buildPriorAuthChecklist(check: unknown): PriorAuthChecklistView 
     ...emptyChecklist,
     status: "complete",
     prior_auth: parsePriorAuthCheck(data),
+    ...(typeof data.requires_manual_review === "boolean" ? { requires_manual_review: data.requires_manual_review } : {}),
     mac: macName ? { name: macName, jurisdiction: str(mac?.jurisdiction) } : null,
     codes_requiring_pa: codesRequiringPa.slice(0, MAX_LIST_ITEMS * 2),
     documentation: strings(data.documentation_checklist).map((text) => ({ text, mandatory: null })),
@@ -418,6 +423,7 @@ export function buildCriteriaList(query: string | undefined, list: unknown, meta
     const nested = isRecord(record.policy) ? record.policy : {};
     const text = excerpt(record.text, EXCERPT_CHARS);
     const policy = widgetPolicy({
+      ...nested,
       ...record,
       policy_id: record.policy_id ?? nested.policy_id,
       title: record.policy_title ?? nested.title,

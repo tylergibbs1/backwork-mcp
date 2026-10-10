@@ -1,4 +1,5 @@
 import { BACKWORK_OPERATIONS, type OperationId, type Scope } from "./api-operations.js";
+import { parseApplicability } from "./applicability.js";
 
 /**
  * Response projection: a tool result carries only the response fields the
@@ -58,6 +59,12 @@ function project(value: unknown, tree: ReadTree): unknown {
     if (!subtree) continue;
     const projected = project(child, subtree);
     if (projected !== undefined) kept[key] = projected;
+  }
+  if (tree.applicability_scope) {
+    // Only an explicitly catalogued policy node may publish these fields.
+    const applicability = parseApplicability(kept);
+    for (const key of ["applicability_scope", "applicability_markets", "applicability_evidence", "applicability_note"]) delete kept[key];
+    Object.assign(kept, applicability);
   }
   return kept;
 }

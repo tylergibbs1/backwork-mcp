@@ -311,6 +311,10 @@ Values come from the API response. `source_check.source_url` and `source_check.l
 
 Policy evidence also retains the API's `source_check`: source URL, last fetch time, fetched-content SHA-256, and `source_accuracy` audit samples. Each audit reports the field measured, sample date and size, share of sampled records that matched, 95% Wilson interval, and method. **These samples measure records from a source; they do not measure certainty for the individual policy or a coverage decision.** Missing audits stay `null`. Cards show fetch dates and expandable source sample audits.
 
+Policies with explicit applicability also retain the optional `applicability_scope`, `applicability_markets`, `applicability_evidence` and `applicability_note` fields. Shared-market documents and indexed singleton documents are listed in the publisher's state indexes; that discovery evidence does not establish the member's plan or product coverage. A `document_scoped` policy with no state, line of business or indexed markets has unknown applicability. The cards and text show the API's note, and cards provide publisher index links and source-exact quotes with page numbers. Legacy responses without these fields keep their existing shape.
+
+Applicability evidence is limited to a document SHA-256, up to 16 HTTPS publisher index listings and up to 16 statements of the three supported kinds (`non_medicare_disclaimer`, `commercial_policy_header`, `member_type_branch`). Quotes are bounded to 4,000 characters, index URLs to 2,048 characters, and pages must be positive integers. Unknown fields are dropped; malformed evidence becomes `null`. Market codes and notes are bounded as well. The MCP preserves API confidence and manual-review outputs; index listings do not raise confidence or resolve authorization.
+
 Code matches retain `grounding` separately from their extraction `source`:
 
 | `grounding` | Meaning |

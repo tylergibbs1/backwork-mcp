@@ -22,6 +22,7 @@ import {
   type Scope,
 } from "./api-operations.js";
 import { BackworkApiError, formatApiFailure, parseApiFailure } from "./api-errors.js";
+import { formatApplicability } from "./applicability.js";
 import { codeGroundingNote, codeSourceNote, parseCodeSources, type SourcedCode } from "./code-source.js";
 import { limitCodeDetailsToPayer, otherPayersNote, resolveRequestedPayer } from "./payer-scope.js";
 import { parsePriorAuthCheck, parseResearchDetermination, verdictAnswer } from "./prior-auth-verdict.js";
@@ -72,7 +73,7 @@ const oauthExpectedAudiences = parseDelimitedList(process.env.BACKWORK_MCP_OAUTH
 const oauthResourceOverride = process.env.BACKWORK_MCP_OAUTH_RESOURCE;
 const publicUrlOverride = process.env.BACKWORK_MCP_PUBLIC_URL;
 // Kept equal to package.json and server.json; test/registry-manifest.test.mjs checks it.
-export const SERVER_VERSION = "2.1.4";
+export const SERVER_VERSION = "2.1.5";
 const exposeUnavailableTools = process.env.BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS === "true";
 
 type AuthenticatedIncomingMessage = IncomingMessage & { auth?: AuthInfo };
@@ -545,6 +546,8 @@ function formatCode(code: any): string {
       lines.push(`  - ${p.policy_id}: ${cleanText(p.title, 140)}`);
       lines.push(`    Type: ${p.policy_type || "unknown"}, Disposition: ${p.disposition || "unknown"}${codeSourceNote(p.source)}${codeGroundingNote(p.grounding)}`);
       if (p.jurisdiction) lines.push(`    Jurisdiction: ${p.jurisdiction}`);
+      const applicability = formatApplicability(p);
+      if (applicability) lines.push(`    ${applicability}`);
       if (p.source_url) lines.push(`    Source: ${p.source_url}`);
     });
     if (remaining > 0) lines.push(`  ... ${remaining} more policies omitted. Use backwork_policy_research for focused evidence.`);
@@ -570,6 +573,8 @@ function formatPolicy(policy: any, detailed = false): string {
   if (policy.retire_date) lines.push(`Retired: ${policy.retire_date}`);
   if (policy.last_reviewed_date) lines.push(`Last reviewed: ${policy.last_reviewed_date}`);
   if (policy.source_url) lines.push(`Source: ${policy.source_url}`);
+  const applicability = formatApplicability(policy, detailed);
+  if (applicability) lines.push(applicability);
 
   if (detailed) {
     const sourceAccuracy = formatSourceAccuracy(parseSourceCheck(policy.source_check));
@@ -651,6 +656,8 @@ function formatPriorAuth(result: any): string {
     shown.forEach((p: any) => {
       lines.push(`\n${p.policy_id}: ${p.title}`);
       lines.push(`Type: ${p.policy_type}${p.jurisdiction ? ` | Jurisdiction: ${p.jurisdiction}` : ""}`);
+      const applicability = formatApplicability(p);
+      if (applicability) lines.push(applicability);
       if (p.source_url) lines.push(`Source: ${p.source_url}`);
       if (p.codes?.length > 0) {
         lines.push("Codes:");
@@ -1479,6 +1486,8 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
             const title = criteria.policy_title ?? criteria.policy?.title ?? "Untitled policy";
             lines.push(`${i + 1}. [${criteria.section.toUpperCase()}] ${id}: ${cleanText(title, 140)}`);
             lines.push(`   ${cleanText(criteria.text, 320)}\n`);
+            const applicability = formatApplicability(criteria.applicability_scope ? criteria : criteria.policy ?? {});
+            if (applicability) lines.push(`   ${applicability}`);
           });
           if (result.meta?.pagination?.cursor) lines.push(`More results available. Use cursor: "${result.meta.pagination.cursor}"`);
           return toolResult(lines.join("\n"), result.data, result.meta, buildCriteriaList(query, result.data, result.meta));
