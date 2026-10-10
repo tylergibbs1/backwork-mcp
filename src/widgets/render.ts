@@ -1,4 +1,5 @@
 import type { PriorAuthVerdict } from "../prior-auth-verdict.js";
+import type { Applicability } from "../applicability.js";
 import type { SourceCheck } from "../source-check.js";
 import type { ComponentKind, ViewKind, WidgetView } from "./schemas.js";
 
@@ -56,13 +57,29 @@ export function renderWidget(view: WidgetView): string {
     label ? `<span class="source${source === "document" ? "" : " flagged"}">${esc(label)}</span>` : "";
   const groundingLabel = (code: { grounding?: string | null; grounding_label?: string | null }): string =>
     sourceLabel(code.grounding === "grounded" ? "document" : "unrecognized", code.grounding_label ?? null);
-  const sourceEvidence = (policy: { retrieved_at?: string | null; source_check?: SourceCheck | null }): string => {
+  const applicabilityEvidence = (policy: Applicability): string => {
+    if (!policy.applicability_scope) return "";
+    const names: Record<string, string> = { OR: "Oregon", AK: "Alaska", ID: "Idaho", TX: "Texas" };
+    const note = policy.applicability_note ?? "Applicability details are unavailable; confirm the member's plan with the payer.";
+    const evidence = policy.applicability_evidence;
+    const listings = evidence?.market_index_listings.flatMap((listing) => {
+      if (!/^https:\/\/[^/?#@\s]+(?:[/?#][^\s]*)?$/.test(listing.index_url)) return [];
+      return [`<li><a class="link" href="${esc(listing.index_url)}" data-external target="_blank" rel="noopener noreferrer">Publisher index for ${esc(names[listing.market] ?? listing.market)}</a></li>`];
+    }) ?? [];
+    const statements = evidence?.document_statements.map((statement) => `<li>Source statement (page ${esc(statement.page)}): <q>${esc(statement.quote)}</q></li>`) ?? [];
+    const details = listings.length || statements.length
+      ? `<details class="muted"><summary>Applicability source evidence</summary><ul class="list">${[...listings, ...statements].join("")}</ul></details>`
+      : "";
+    return `<p class="reason">${esc(note)}</p>${details}`;
+  };
+  const sourceEvidence = (policy: Applicability & { retrieved_at?: string | null; source_check?: SourceCheck | null }): string => {
+    const applicability = applicabilityEvidence(policy);
     const fetched = policy.retrieved_at ? `Last fetched ${policy.retrieved_at.slice(0, 10)}` : "Fetch time unknown";
     const audits = policy.source_check?.source_accuracy;
-    if (!audits?.length) return `<p class="muted">${esc(fetched)}</p>`;
+    if (!audits?.length) return `${applicability}<p class="muted">${esc(fetched)}</p>`;
     const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
     const rows = audits.map((audit) => `<li>${esc(audit.field)}: ${esc(percent(audit.accuracy))} matched in ${esc(audit.sample_size)} sampled records; 95% interval ${esc(percent(audit.ci_low))}–${esc(percent(audit.ci_high))}; sampled ${esc(audit.sampled_at.slice(0, 10))}; ${esc(audit.method)}</li>`);
-    return `<p class="muted">${esc(fetched)}</p><details class="muted"><summary>Source sample audits</summary><p>These samples measure this source's records, not certainty for this policy.</p><ul class="list">${rows.join("")}</ul></details>`;
+    return `${applicability}<p class="muted">${esc(fetched)}</p><details class="muted"><summary>Source sample audits</summary><p>These samples measure this source's records, not certainty for this policy.</p><ul class="list">${rows.join("")}</ul></details>`;
   };
   type Linked = { policy_id: string; title: string; link: { kind: "backwork" | "source"; url: string } | null };
   /** `text` defaults to "Open policy" for a Backwork page and "Open source document" for a payer or CMS document. */
@@ -116,6 +133,7 @@ ${link(policy)}
     return `<article class="card" aria-label="Backwork coverage result">
 <header><h2>Coverage for ${esc(view.codes_requested.join(", "))}</h2>${paPill}</header>
 ${paNote ? `<p class="reason">${esc(paNote)}</p>` : ""}
+${view.requires_manual_review === true ? '<p class="reason">Manual review required</p>' : ""}
 ${policies.join("") || '<p class="muted">No Backwork policy lists these codes.</p>'}
 ${more(view.policies_omitted, "policies")}
 </article>`;
@@ -154,6 +172,7 @@ ${more(view.policies_omitted, "policies")}
 <header><h2>Prior authorization checklist</h2>${status}</header>
 ${subtitle ? `<p class="muted">${esc(subtitle)}</p>` : ""}
 ${view.prior_auth.reason ? `<p class="reason">${esc(view.prior_auth.reason)}</p>` : ""}${pending}
+${view.requires_manual_review === true ? '<p class="reason">Manual review required</p>' : ""}
 ${section("Codes requiring prior auth", codes ? `<ul class="codes">${codes}</ul>` : "")}
 ${section("Documentation needed", documentation.length ? `<ul class="list checklist">${documentation.map((item) => `<li>${item}</li>`).join("")}</ul>` : "")}
 ${section("Known gaps", list(gaps))}

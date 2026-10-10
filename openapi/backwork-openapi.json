@@ -556,11 +556,21 @@
           {
             "name": "jurisdiction",
             "in": "query",
-            "description": "Filter by MAC jurisdiction code (e.g., JE, JF)",
+            "description": "Filter by MAC jurisdiction or publisher-indexed state (e.g., JE, OR); shared documents retain their scope label",
             "required": false,
             "schema": {
               "type": "string",
               "maxLength": 10
+            }
+          },
+          {
+            "name": "line_of_business",
+            "in": "query",
+            "description": "Filter by a document-scoped line of business; shared-market documents never match",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 50
             }
           },
           {
@@ -683,6 +693,11 @@
                             },
                             "results": {
                               "type": "integer"
+                            },
+                            "fallback": {
+                              "description": "Scoped keyword fallback when vector candidates have no current eligible policy rows",
+                              "type": "string",
+                              "const": "semantic_scope_not_indexed"
                             }
                           },
                           "required": [
@@ -697,6 +712,9 @@
                               "type": "string"
                             },
                             "jurisdiction": {
+                              "type": "string"
+                            },
+                            "line_of_business": {
                               "type": "string"
                             },
                             "payer": {
@@ -9898,6 +9916,101 @@
               "null"
             ]
           },
+          "applicability_scope": {
+            "type": "string",
+            "enum": [
+              "shared_markets",
+              "document_scoped"
+            ]
+          },
+          "applicability_markets": {
+            "description": "Markets whose publisher indexes list this exact document",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "applicability_evidence": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "document_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "market_index_listings": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "market": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$"
+                        },
+                        "index_url": {
+                          "type": "string",
+                          "maxLength": 2048,
+                          "pattern": "^https:\\/\\/"
+                        }
+                      },
+                      "required": [
+                        "market",
+                        "index_url"
+                      ]
+                    }
+                  },
+                  "document_statements": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "non_medicare_disclaimer",
+                            "commercial_policy_header",
+                            "member_type_branch"
+                          ]
+                        },
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4000
+                        },
+                        "page": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "quote",
+                        "page"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "document_sha256",
+                  "market_index_listings",
+                  "document_statements"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "applicability_note": {
+            "description": "Explanation when shared or unscoped evidence does not establish a member's plan applicability",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "effective_date": {
             "type": [
               "string",
@@ -10291,10 +10404,14 @@
           },
           "confidence": {
             "type": "number",
-            "description": "0-1 score based on how many criteria could be evaluated",
+            "description": "0-1 score based on evaluated criteria; capped at 0.79 when member plan applicability is unestablished",
             "examples": [
               0.85
             ]
+          },
+          "requires_manual_review": {
+            "description": "Scope evidence requires payer verification before using this result",
+            "type": "boolean"
           },
           "reasons": {
             "type": "array",
@@ -10340,6 +10457,101 @@
               },
               "policy_type": {
                 "type": "string"
+              },
+              "applicability_scope": {
+                "type": "string",
+                "enum": [
+                  "shared_markets",
+                  "document_scoped"
+                ]
+              },
+              "applicability_markets": {
+                "description": "Markets whose publisher indexes list this exact document",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "applicability_evidence": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "document_sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "market_index_listings": {
+                        "maxItems": 16,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "market": {
+                              "type": "string",
+                              "pattern": "^[A-Z]{2}$"
+                            },
+                            "index_url": {
+                              "type": "string",
+                              "maxLength": 2048,
+                              "pattern": "^https:\\/\\/"
+                            }
+                          },
+                          "required": [
+                            "market",
+                            "index_url"
+                          ]
+                        }
+                      },
+                      "document_statements": {
+                        "maxItems": 16,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "non_medicare_disclaimer",
+                                "commercial_policy_header",
+                                "member_type_branch"
+                              ]
+                            },
+                            "quote": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4000
+                            },
+                            "page": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "quote",
+                            "page"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "document_sha256",
+                      "market_index_listings",
+                      "document_statements"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "applicability_note": {
+                "description": "Explanation when shared or unscoped evidence does not establish a member's plan applicability",
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "public_url": {
                 "anyOf": [
@@ -10530,6 +10742,101 @@
                   }
                 ]
               },
+              "applicability_scope": {
+                "type": "string",
+                "enum": [
+                  "shared_markets",
+                  "document_scoped"
+                ]
+              },
+              "applicability_markets": {
+                "description": "Markets whose publisher indexes list this exact document",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "applicability_evidence": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "document_sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "market_index_listings": {
+                        "maxItems": 16,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "market": {
+                              "type": "string",
+                              "pattern": "^[A-Z]{2}$"
+                            },
+                            "index_url": {
+                              "type": "string",
+                              "maxLength": 2048,
+                              "pattern": "^https:\\/\\/"
+                            }
+                          },
+                          "required": [
+                            "market",
+                            "index_url"
+                          ]
+                        }
+                      },
+                      "document_statements": {
+                        "maxItems": 16,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "non_medicare_disclaimer",
+                                "commercial_policy_header",
+                                "member_type_branch"
+                              ]
+                            },
+                            "quote": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4000
+                            },
+                            "page": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "quote",
+                            "page"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "document_sha256",
+                      "market_index_listings",
+                      "document_statements"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "applicability_note": {
+                "description": "Explanation when shared or unscoped evidence does not establish a member's plan applicability",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "public_url": {
                 "anyOf": [
                   {
@@ -10565,6 +10872,101 @@
               "effective_date",
               "public_url",
               "source_check"
+            ]
+          },
+          "applicability_scope": {
+            "type": "string",
+            "enum": [
+              "shared_markets",
+              "document_scoped"
+            ]
+          },
+          "applicability_markets": {
+            "description": "Markets whose publisher indexes list this exact document",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "applicability_evidence": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "document_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "market_index_listings": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "market": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$"
+                        },
+                        "index_url": {
+                          "type": "string",
+                          "maxLength": 2048,
+                          "pattern": "^https:\\/\\/"
+                        }
+                      },
+                      "required": [
+                        "market",
+                        "index_url"
+                      ]
+                    }
+                  },
+                  "document_statements": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "non_medicare_disclaimer",
+                            "commercial_policy_header",
+                            "member_type_branch"
+                          ]
+                        },
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4000
+                        },
+                        "page": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "quote",
+                        "page"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "document_sha256",
+                  "market_index_listings",
+                  "document_statements"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "applicability_note": {
+            "description": "Explanation when shared or unscoped evidence does not establish a member's plan applicability",
+            "type": [
+              "string",
+              "null"
             ]
           }
         },
@@ -12085,6 +12487,101 @@
               "null"
             ]
           },
+          "applicability_scope": {
+            "type": "string",
+            "enum": [
+              "shared_markets",
+              "document_scoped"
+            ]
+          },
+          "applicability_markets": {
+            "description": "Markets whose publisher indexes list this exact document",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "applicability_evidence": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "document_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "market_index_listings": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "market": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$"
+                        },
+                        "index_url": {
+                          "type": "string",
+                          "maxLength": 2048,
+                          "pattern": "^https:\\/\\/"
+                        }
+                      },
+                      "required": [
+                        "market",
+                        "index_url"
+                      ]
+                    }
+                  },
+                  "document_statements": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "non_medicare_disclaimer",
+                            "commercial_policy_header",
+                            "member_type_branch"
+                          ]
+                        },
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4000
+                        },
+                        "page": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "quote",
+                        "page"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "document_sha256",
+                  "market_index_listings",
+                  "document_statements"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "applicability_note": {
+            "description": "Explanation when shared or unscoped evidence does not establish a member's plan applicability",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "public_url": {
             "anyOf": [
               {
@@ -12410,6 +12907,101 @@
             ],
             "description": "The payer's URL slug; null when the policy has no payer"
           },
+          "applicability_scope": {
+            "type": "string",
+            "enum": [
+              "shared_markets",
+              "document_scoped"
+            ]
+          },
+          "applicability_markets": {
+            "description": "Markets whose publisher indexes list this exact document",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "applicability_evidence": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "document_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "market_index_listings": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "market": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$"
+                        },
+                        "index_url": {
+                          "type": "string",
+                          "maxLength": 2048,
+                          "pattern": "^https:\\/\\/"
+                        }
+                      },
+                      "required": [
+                        "market",
+                        "index_url"
+                      ]
+                    }
+                  },
+                  "document_statements": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "non_medicare_disclaimer",
+                            "commercial_policy_header",
+                            "member_type_branch"
+                          ]
+                        },
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4000
+                        },
+                        "page": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "quote",
+                        "page"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "document_sha256",
+                  "market_index_listings",
+                  "document_statements"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "applicability_note": {
+            "description": "Explanation when shared or unscoped evidence does not establish a member's plan applicability",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "public_url": {
             "anyOf": [
               {
@@ -12684,6 +13276,101 @@
                     {
                       "type": "null"
                     }
+                  ]
+                },
+                "applicability_scope": {
+                  "type": "string",
+                  "enum": [
+                    "shared_markets",
+                    "document_scoped"
+                  ]
+                },
+                "applicability_markets": {
+                  "description": "Markets whose publisher indexes list this exact document",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "applicability_evidence": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "document_sha256": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "market_index_listings": {
+                          "maxItems": 16,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "market": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{2}$"
+                              },
+                              "index_url": {
+                                "type": "string",
+                                "maxLength": 2048,
+                                "pattern": "^https:\\/\\/"
+                              }
+                            },
+                            "required": [
+                              "market",
+                              "index_url"
+                            ]
+                          }
+                        },
+                        "document_statements": {
+                          "maxItems": 16,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "non_medicare_disclaimer",
+                                  "commercial_policy_header",
+                                  "member_type_branch"
+                                ]
+                              },
+                              "quote": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000
+                              },
+                              "page": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "quote",
+                              "page"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "document_sha256",
+                        "market_index_listings",
+                        "document_statements"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "applicability_note": {
+                  "description": "Explanation when shared or unscoped evidence does not establish a member's plan applicability",
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "public_url": {
@@ -13285,6 +13972,101 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "applicability_scope": {
+            "type": "string",
+            "enum": [
+              "shared_markets",
+              "document_scoped"
+            ]
+          },
+          "applicability_markets": {
+            "description": "Markets whose publisher indexes list this exact document",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "applicability_evidence": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "document_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "market_index_listings": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "market": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$"
+                        },
+                        "index_url": {
+                          "type": "string",
+                          "maxLength": 2048,
+                          "pattern": "^https:\\/\\/"
+                        }
+                      },
+                      "required": [
+                        "market",
+                        "index_url"
+                      ]
+                    }
+                  },
+                  "document_statements": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "non_medicare_disclaimer",
+                            "commercial_policy_header",
+                            "member_type_branch"
+                          ]
+                        },
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4000
+                        },
+                        "page": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "quote",
+                        "page"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "document_sha256",
+                  "market_index_listings",
+                  "document_statements"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "applicability_note": {
+            "description": "Explanation when shared or unscoped evidence does not establish a member's plan applicability",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "public_url": {

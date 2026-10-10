@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { applicabilitySchemaFields } from "../applicability.js";
 import { priorAuthVerdictSchema } from "../prior-auth-verdict.js";
 import { sourceCheckSchema } from "../source-check.js";
 
@@ -31,6 +32,7 @@ export const widgetPolicySchema = z.object({
   /** Who issued the policy: "CMS" for Medicare policy types, otherwise the payer name when the API returns one. */
   payer: z.string().nullable(),
   jurisdiction: z.string().nullable(),
+  ...applicabilitySchemaFields,
   effective_date: z.string().nullable(),
   retrieved_at: z.string().nullable().optional(),
   source_check: sourceCheckSchema.nullable().optional(),
@@ -43,6 +45,7 @@ export const coverageCardSchema = z
     kind: z.literal("coverage_card"),
     codes_requested: z.array(z.string()),
     prior_auth: priorAuthVerdictSchema.nullable(),
+    requires_manual_review: z.boolean().optional(),
     policies: z.array(
       widgetPolicySchema.extend({ codes: z.array(widgetCodeSchema), codes_omitted: z.number().int().nonnegative() }),
     ),
@@ -56,6 +59,7 @@ export const priorAuthChecklistSchema = z
     status: z.enum(["complete", "pending", "running", "failed", "canceled"]),
     research_id: z.string().nullable(),
     prior_auth: priorAuthVerdictSchema,
+    requires_manual_review: z.boolean().optional(),
     mac: z.object({ name: z.string(), jurisdiction: z.string().nullable() }).nullable(),
     codes_requiring_pa: z.array(widgetCodeSchema.extend({ policy_id: z.string(), policy_title: z.string() })),
     documentation: z.array(z.object({ text: z.string(), mandatory: z.boolean().nullable() })),
