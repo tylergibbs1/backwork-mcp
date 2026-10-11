@@ -73,7 +73,7 @@ const oauthExpectedAudiences = parseDelimitedList(process.env.BACKWORK_MCP_OAUTH
 const oauthResourceOverride = process.env.BACKWORK_MCP_OAUTH_RESOURCE;
 const publicUrlOverride = process.env.BACKWORK_MCP_PUBLIC_URL;
 // Kept equal to package.json and server.json; test/registry-manifest.test.mjs checks it.
-export const SERVER_VERSION = "2.1.5";
+export const SERVER_VERSION = "2.1.6";
 const exposeUnavailableTools = process.env.BACKWORK_MCP_EXPOSE_UNAVAILABLE_TOOLS === "true";
 
 type AuthenticatedIncomingMessage = IncomingMessage & { auth?: AuthInfo };
@@ -1421,7 +1421,7 @@ Use this for policy search, fetching one policy by ID, searching extracted crite
       inputSchema: {
         action: z.enum(["search", "get", "criteria", "changes", "jurisdictions", "compare"]).describe("Policy research action to perform"),
         query: z.string().max(500).optional().describe("Search text for policy or criteria research"),
-        policy_id: z.string().max(80).optional().describe("Policy ID for action='get' or filtering changes"),
+        policy_id: z.string().max(256).optional().describe("Policy ID for action='get' or filtering changes"),
         policy_type: z.enum(["LCD", "Article", "NCD", "PayerPolicy", "Medical Policy", "Drug Policy"]).optional(),
         jurisdiction: z.string().max(10).optional(),
         payer: z.string().max(80).optional(),

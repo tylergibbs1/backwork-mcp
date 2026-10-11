@@ -1209,7 +1209,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "maxLength": 50
+              "maxLength": 256
             }
           },
           {
@@ -3502,7 +3502,7 @@
                   "policy_id": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 50,
+                    "maxLength": 256,
                     "description": "The policy identifier",
                     "examples": [
                       "L33831"
@@ -8498,7 +8498,7 @@
           "policy_id": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 50
+            "maxLength": 256
           },
           "limit": {
             "default": 10,

@@ -107,3 +107,60 @@ describe("against a Backwork API that serves every endpoint", () => {
     assert.match(result.content[0].text, /--- Sources ---\nAuthority: CMS\nCurrency: effective 2025-01-01; retrieved by Backwork on or after 2026-09-20T09:00:00.000Z/);
   });
 });
+
+describe("public policy identifier transport", () => {
+  const policyId = `POLICY-${"x".repeat(249)}`;
+  let api;
+  let client;
+  const requests = [];
+
+  before(async () => {
+    api = createServer((req, res) => {
+      const url = new URL(req.url, "http://localhost");
+      requests.push(url);
+      const data = url.pathname === "/api/v1/policies/changes" ? [] : {
+        policy_id: policyId,
+        title: "Public policy identifier fixture",
+        policy_type: "PayerPolicy",
+        status: "active",
+        jurisdiction: null,
+        payer: { name: "Fixture payer", slug: "fixture-payer" },
+        source_url: "https://publisher.example/policy.pdf",
+        effective_date: "2026-01-01",
+        codes: {},
+      };
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, data }));
+    });
+    await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+    client = await connect({ BACKWORK_API_BASE: `http://127.0.0.1:${api.address().port}/api/v1` });
+  });
+  after(async () => {
+    await client.close();
+    await new Promise((resolve) => api.close(resolve));
+  });
+
+  test("forwards the full 256-character identifier in detail paths and change filters", async () => {
+    for (const action of ["get", "changes"]) {
+      const count = requests.length;
+      const result = await client.callTool({ name: "backwork_policy_research", arguments: { action, policy_id: policyId, response_format: "json" } });
+      assert.equal(result.isError, undefined, result.content?.[0]?.text);
+      assert.equal(requests.length, count + 1);
+      if (action === "get") {
+        assert.equal(decodeURIComponent(requests.at(-1).pathname.split("/").at(-1)), policyId);
+        assert.equal(result.structuredContent.data.policy_id, policyId);
+      } else {
+        assert.equal(requests.at(-1).pathname, "/api/v1/policies/changes");
+        assert.equal(requests.at(-1).searchParams.get("policy_id"), policyId);
+      }
+    }
+  });
+
+  test("refuses identifiers above the public bound before any API request", async () => {
+    const count = requests.length;
+    const result = await client.callTool({ name: "backwork_policy_research", arguments: { action: "get", policy_id: `${policyId}x` } });
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /256/);
+    assert.equal(requests.length, count);
+  });
+});
