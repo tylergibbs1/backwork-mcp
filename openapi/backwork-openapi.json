@@ -11202,6 +11202,13 @@
               "null"
             ]
           },
+          "retrieved_at": {
+            "description": "Stored source retrieval time; null when no fetch time is recorded.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "drug_name": {
             "type": "string"
           },
@@ -11323,6 +11330,7 @@
           "formulary_name",
           "plan_year",
           "effective_date",
+          "retrieved_at",
           "drug_name",
           "matched_text",
           "therapeutic_category",

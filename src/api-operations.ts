@@ -452,6 +452,7 @@ export const BACKWORK_OPERATIONS = {
       "[].formulary_name",
       "[].plan_year",
       "[].effective_date",
+      "[].retrieved_at",
       "[].drug_name",
       "[].drug_class",
       "[].tier",
