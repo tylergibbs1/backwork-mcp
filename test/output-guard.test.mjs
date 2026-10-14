@@ -125,7 +125,7 @@ const FIXTURES = {
   evaluateCoverage: { covered: true, confidence: 0.9, reasons: [], blocks_evaluated: 3, policy: { policy_id: "L33718", title: "x", policy_type: "LCD" } },
   getPriorAuthResearch: research,
   researchPriorAuth: research,
-  searchDrugFormularyEvidence: [{ source: "cvs_caremark", payer_name: "CVS Caremark", drug_name: "Ozempic", tier: "2", coverage_status: "covered", requirements: { prior_authorization: true }, source_url: "https://caremark.example/f", created_at: TRACE }],
+  searchDrugFormularyEvidence: [{ source: "cvs_caremark", payer_name: "CVS Caremark", drug_name: "Ozempic", tier: "2", coverage_status: "covered", requirements: { prior_authorization: true }, source_url: "https://caremark.example/f", retrieved_at: VERIFIED, created_at: TRACE }, { source: "express_scripts", payer_name: "Express Scripts", drug_name: "Legacy unknown", coverage_status: "excluded", source_url: "https://express.example/f", retrieved_at: null, updated_at: TRACE }],
   getComplianceStats: { total_changes_30d: 4, acknowledged_count: 1, unreviewed_count: 3, acknowledgment_rate: 25, critical_unreviewed: 0, timestamp: TRACE },
   listUnreviewedChanges: [{ diff_id: 42, policy_id: "L1", policy_title: "Policy L1", change_type: "updated", changed_at: "2026-06-01" }],
   acknowledgeChange: { id: 5, acknowledged: true, already_acked: false },
@@ -369,4 +369,21 @@ test("the diff ID an acknowledgment needs reaches only a connection that can ack
 after(async () => {
   await (await startHostedOAuth({ apiBase })).close();
   await new Promise((resolve) => api.close(resolve));
+});
+
+
+test("formulary fetch evidence survives projection and unknown fetch time stays unknown", async () => {
+  const client = await connect({ BACKWORK_API_BASE: apiBase });
+  try {
+    const result = await client.callTool({ name: "backwork_drug_formulary_research", arguments: { query: "Ozempic", response_format: "json" } });
+    assert.notEqual(result.isError, true);
+    assert.equal(result.structuredContent.data[0].retrieved_at, VERIFIED);
+    assert.equal(result.structuredContent.data[1].retrieved_at, null);
+    assert.equal(result.structuredContent.provenance.sources.find((source) => source.source_url === "https://caremark.example/f").retrieved_at, VERIFIED);
+    assert.equal(result.structuredContent.provenance.sources.find((source) => source.source_url === "https://express.example/f").retrieved_at, null);
+    assert.equal(result.structuredContent.provenance.retrieved_at, null);
+    assertClean(result, "formulary fetch evidence");
+  } finally {
+    await client.close();
+  }
 });

@@ -69,9 +69,9 @@ function isoDay(value: unknown): string | null {
   return text && /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : null;
 }
 
-function policyStatus(value: unknown): "active" | "retired" | null {
+function policyStatus(value: unknown): "active" | "draft" | "retired" | null {
   const status = str(value);
-  return status === "active" || status === "retired" ? status : null;
+  return status === "active" || status === "draft" || status === "retired" ? status : null;
 }
 
 function bool(value: unknown): boolean | null {

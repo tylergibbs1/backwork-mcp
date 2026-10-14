@@ -29,6 +29,16 @@ const policyMatch = (policy_id, source, extra = {}) => ({
   ...(source ? { source } : {}),
   ...extra,
 });
+const draftPolicy = {
+  ...policyMatch("DRAFT", null, {
+    title: "Polygenic Risk Score",
+    policy_type: "PayerPolicy",
+    jurisdiction: null,
+    effective_date: "2026-12-01",
+  }),
+  status: "draft",
+  payer: "BCBSRI",
+};
 const comparedPolicy = (policy_id, codes, is_national = false) => ({
   policy_id,
   title: `Policy ${policy_id}`,
@@ -112,10 +122,13 @@ const RESPONSES = {
   "GET /api/v1/policies": (url) =>
     url.searchParams.get("q") === "nothing"
       ? []
-      : [
-          { ...policyMatch("L1"), status: "active", public_url: "https://backworkhealth.com/policy/L1", summary: "Covers ultrasound guidance for needle placement." },
-          { ...policyMatch("AET-0113", null, { policy_type: "Medical Policy", jurisdiction: null }), payer: "Aetna", status: "retired", public_url: null, source_url: "https://www.aetna.com/cpb/0113.html" },
-        ],
+      : url.searchParams.get("q") === "draft-policy"
+        ? [draftPolicy]
+        : [
+            { ...policyMatch("L1"), status: "active", public_url: "https://backworkhealth.com/policy/L1", summary: "Covers ultrasound guidance for needle placement." },
+            { ...policyMatch("AET-0113", null, { policy_type: "Medical Policy", jurisdiction: null }), payer: "Aetna", status: "retired", public_url: null, source_url: "https://www.aetna.com/cpb/0113.html" },
+          ],
+  "GET /api/v1/policies/DRAFT": () => draftPolicy,
   "GET /api/v1/policies/L1": () => ({
     ...policyMatch("L1"),
     status: "active",
@@ -434,6 +447,21 @@ function loadWidget(html, { openai } = {}) {
 }
 
 describe("component rendering", () => {
+  for (const args of [
+    { action: "get", policy_id: "DRAFT" },
+    { action: "search", query: "draft-policy", status: "all" },
+  ]) {
+    test(`${args.action} preserves and displays the API's draft policy status`, async () => {
+      const { structuredContent } = await call("backwork_policy_research", args);
+      const view = structuredContent.widget;
+      const policy = args.action === "get" ? view.policy : view.policies[0];
+      assert.equal(policy.status, "draft");
+      const { contents } = await client.readResource({ uri: WIDGETS.policy_research.uri });
+      const page = loadWidget(contents[0].text, { openai: { toolOutput: structuredContent } });
+      assert.match(page.root.innerHTML, /<span[^>]*>Draft<\/span>/);
+    });
+  }
+
   test("renders the tool result after the MCP Apps handshake, in the host's theme", async () => {
     const { structuredContent } = await CALLS.coverage_card();
     const { contents } = await client.readResource({ uri: WIDGETS.coverage_card.uri });
