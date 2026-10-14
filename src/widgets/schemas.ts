@@ -107,7 +107,7 @@ export const policyComparisonSchema = z
   })
   .describe("Policy comparison table: the requested codes side by side across Medicare contractors (MACs).");
 
-const policyStatus = z.enum(["active", "retired"]).nullable();
+const policyStatus = z.enum(["active", "draft", "retired"]).nullable();
 
 // The list views below hold at least one item: a response with nothing to show
 // has no view, so the component collapses instead of rendering an empty card.

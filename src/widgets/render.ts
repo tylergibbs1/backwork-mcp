@@ -98,7 +98,8 @@ export function renderWidget(view: WidgetView): string {
   const morePages = (count: number, hasMore: boolean, noun: string): string =>
     count > 0 ? more(count, noun) : hasMore ? `<p class="muted">More ${noun} available. Ask for the next page to see them.</p>` : "";
   const titleCase = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1).replace(/_/g, " ");
-  const retired = (status: string | null): string => (status === "retired" ? ' <span class="tag">Retired</span>' : "");
+  const policyStatusTag = (status: string | null): string =>
+    status === "retired" || status === "draft" ? ` <span class="tag">${titleCase(status)}</span>` : "";
   /** `title` is HTML; escape what goes into it. */
   const card = (label: string, title: string, body: string): string =>
     `<article class="card" aria-label="${esc(label)}">
@@ -184,7 +185,7 @@ ${section("Citations", list(citations, true))}
     const items = view.policies.map(
       (policy) => `<li>
 <p class="eyebrow">${esc(join([policy.payer, policy.jurisdiction, policy.policy_type]))}</p>
-<p class="row"><strong>${esc(policy.title)}</strong>${retired(policy.status)}</p>
+<p class="row"><strong>${esc(policy.title)}</strong>${policyStatusTag(policy.status)}</p>
 <p class="muted">${esc(join([`Policy ${policy.policy_id}`, policy.effective_date && `Effective ${policy.effective_date}`]))}</p>
 ${sourceEvidence(policy)}
 ${policy.summary ? `<p class="excerpt">${esc(policy.summary)}</p>` : ""}${link(policy)}
@@ -217,7 +218,7 @@ ${policy.summary ? `<p class="excerpt">${esc(policy.summary)}</p>` : ""}${link(p
       .join("");
     return `<article class="card" aria-label="Backwork policy">
 <div><p class="eyebrow">${esc(join([policy.payer, policy.jurisdiction, policy.policy_type]))}</p>
-<header><h2>${esc(policy.title)}</h2>${retired(policy.status)}</header>
+<header><h2>${esc(policy.title)}</h2>${policyStatusTag(policy.status)}</header>
 <p class="muted">${esc(
       join([`Policy ${policy.policy_id}`, policy.effective_date && `Effective ${policy.effective_date}`, policy.last_reviewed_date && `Reviewed ${policy.last_reviewed_date}`]),
     )}</p>${sourceEvidence(policy)}</div>
